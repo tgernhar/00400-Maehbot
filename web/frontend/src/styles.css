@@ -187,9 +187,60 @@ button {
   background: #141a22;
 }
 
+.live-panel {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #2a4a3a;
+  border-radius: 8px;
+  background: #121820;
+}
+
+.live-panel h2,
 .recording-panel h2 {
   margin: 0 0 0.5rem;
   font-size: 1.1rem;
+}
+
+.live-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.live-controls input {
+  min-width: 220px;
+  padding: 0.5rem;
+}
+
+.live-controls .icon-btn {
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.45rem 0.65rem;
+}
+
+.live-viewport {
+  margin-top: 1rem;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0e12;
+  border: 1px dashed #333;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.live-viewport .camera-preview {
+  max-height: 360px;
+  width: 100%;
+  object-fit: contain;
+}
+
+.live-placeholder {
+  padding: 2rem 1rem;
+  text-align: center;
 }
 
 .recording-controls {
@@ -203,20 +254,4 @@ button {
 .recording-controls input {
   min-width: 220px;
   padding: 0.5rem;
-}
-
-.recording-controls .icon-btn {
-  font-size: 1.25rem;
-  line-height: 1;
-  padding: 0.45rem 0.65rem;
-}
-
-.recording-live {
-  margin-top: 1rem;
-}
-
-.recording-live .camera-preview {
-  max-height: 360px;
-  object-fit: contain;
-  background: #0a0e12;
 }

@@ -34,6 +34,8 @@ export default function TrainingPage() {
   const [classId, setClassId] = useState("clover");
   const [uploadName, setUploadName] = useState("");
   const [recordName, setRecordName] = useState("");
+  const [photoName, setPhotoName] = useState("");
+  const [liveActive, setLiveActive] = useState(false);
   const [recording, setRecording] = useState<RecordingStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [previewTick, setPreviewTick] = useState(0);
@@ -70,13 +72,11 @@ export default function TrainingPage() {
   }, []);
 
   useEffect(() => {
-    if (!recording || (recording.state !== "recording" && recording.state !== "paused")) {
-      return;
-    }
+    if (!liveActive) return;
     setPreviewTick(Date.now());
     const id = setInterval(() => setPreviewTick(Date.now()), 500);
     return () => clearInterval(id);
-  }, [recording?.state]);
+  }, [liveActive]);
 
   useEffect(() => {
     drawFrame();
@@ -156,7 +156,7 @@ export default function TrainingPage() {
 
   async function handleCaptureSnapshot() {
     const name =
-      recordName.trim() ||
+      photoName.trim() ||
       `Foto_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}`;
     try {
       await captureSnapshot(name);
@@ -223,11 +223,60 @@ export default function TrainingPage() {
       {message && <p className="ok">{message}</p>}
       {recording?.error && <p className="error">{recording.error}</p>}
 
+      <section className="live-panel">
+        <h2>Livebild &amp; Foto</h2>
+        <p className="muted">
+          Start zeigt das aktuelle Kamerabild. Stopp beendet die Anzeige. Der Kamera-Button
+          speichert ein Einzelfoto zur Annotation.
+        </p>
+        <div className="live-controls">
+          <input
+            placeholder="Name für Foto"
+            value={photoName}
+            onChange={(e) => setPhotoName(e.target.value)}
+            disabled={!liveActive}
+          />
+          <button type="button" disabled={liveActive} onClick={() => setLiveActive(true)}>
+            Start
+          </button>
+          <button type="button" disabled={!liveActive} onClick={() => setLiveActive(false)}>
+            Stopp
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            disabled={!liveActive || isRecording}
+            onClick={handleCaptureSnapshot}
+            title="Einzelfoto aufnehmen"
+            aria-label="Einzelfoto aufnehmen"
+          >
+            📷
+          </button>
+          <span className={`badge ${liveActive ? "ok" : ""}`}>
+            {liveActive ? "Live aktiv" : "Live gestoppt"}
+          </span>
+        </div>
+        <div className="live-viewport">
+          {liveActive ? (
+            <img
+              src={cameraPreviewUrl(previewTick)}
+              alt="Livebild"
+              className="camera-preview"
+              onError={(e) => {
+                e.currentTarget.style.opacity = "0.35";
+              }}
+            />
+          ) : (
+            <p className="muted live-placeholder">Livebild gestoppt — Start drücken</p>
+          )}
+        </div>
+      </section>
+
       <section className="recording-panel">
         <h2>Anlernfahrt aufnehmen</h2>
         <p className="muted">
           Start während der Fahrt — der Core speichert Kamerabilder als Video. Pause unterbricht
-          die Aufnahme, Stopp legt die Session an. Alternativ ein Einzelfoto mit dem Kamera-Button.
+          die Aufnahme, Stopp legt die Session an.
         </p>
         <div className="recording-controls">
           <input
@@ -241,16 +290,6 @@ export default function TrainingPage() {
           </button>
           <button
             type="button"
-            className="icon-btn"
-            disabled={isRecording}
-            onClick={handleCaptureSnapshot}
-            title="Einzelfoto aufnehmen"
-            aria-label="Einzelfoto aufnehmen"
-          >
-            📷
-          </button>
-          <button
-            type="button"
             disabled={!isRecording}
             onClick={handlePauseRecording}
           >
@@ -261,19 +300,6 @@ export default function TrainingPage() {
           </button>
           <span className={`badge ${isRecording ? "warn" : "ok"}`}>{recordingLabel(recording)}</span>
         </div>
-        {isRecording && (
-          <div className="recording-live">
-            <p className="muted">Livebild während der Aufnahme</p>
-            <img
-              src={cameraPreviewUrl(previewTick)}
-              alt="Livebild"
-              className="camera-preview"
-              onError={(e) => {
-                e.currentTarget.style.opacity = "0.35";
-              }}
-            />
-          </div>
-        )}
       </section>
 
       <div className="training-upload">
