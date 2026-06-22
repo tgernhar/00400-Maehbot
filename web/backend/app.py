@@ -20,6 +20,7 @@ from storage.database import Database
 from storage.paths import StoragePaths
 from training.annotations import list_session_annotations, save_annotation
 from training.export_yolo import export_session_to_yolo
+from training.recording import queue_recording_command, read_recording_status
 from training.session import extract_frame_jpeg, register_video_session
 from web.backend.auth import (
     DEFAULT_PASSWORD,
@@ -39,6 +40,8 @@ from web.backend.schemas import (
     LoginIn,
     ModeConfigIn,
     ModeConfigOut,
+    RecordingStartIn,
+    RecordingStatusOut,
     SprayConfigIn,
     SprayConfigOut,
     StatusOut,
@@ -309,6 +312,55 @@ async def create_training_session(
     tmp.write_bytes(content)
     result = register_video_session(state["paths"], state["db"], name, tmp)
     return TrainingSessionOut(**result)
+
+
+@app.get("/api/training/record/status", response_model=RecordingStatusOut)
+def get_recording_status(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> RecordingStatusOut:
+    data = read_recording_status(state["paths"])
+    return RecordingStatusOut(**data)
+
+
+@app.post("/api/training/record/start", response_model=RecordingStatusOut)
+def start_recording(
+    body: RecordingStartIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> RecordingStatusOut:
+    current = read_recording_status(state["paths"])
+    if current.get("state") in ("recording", "paused"):
+        raise HTTPException(status_code=409, detail="Aufnahme läuft bereits")
+    queue_recording_command(state["paths"], "start", body.name.strip())
+    return RecordingStatusOut(**read_recording_status(state["paths"]))
+
+
+@app.post("/api/training/record/pause", response_model=RecordingStatusOut)
+def pause_recording(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> RecordingStatusOut:
+    queue_recording_command(state["paths"], "pause")
+    return RecordingStatusOut(**read_recording_status(state["paths"]))
+
+
+@app.post("/api/training/record/resume", response_model=RecordingStatusOut)
+def resume_recording(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> RecordingStatusOut:
+    queue_recording_command(state["paths"], "resume")
+    return RecordingStatusOut(**read_recording_status(state["paths"]))
+
+
+@app.post("/api/training/record/stop", response_model=RecordingStatusOut)
+def stop_recording(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> RecordingStatusOut:
+    queue_recording_command(state["paths"], "stop")
+    return RecordingStatusOut(**read_recording_status(state["paths"]))
 
 
 @app.get("/api/training/sessions/{session_id}/frames/{frame_index}/image")

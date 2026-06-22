@@ -9,10 +9,14 @@ Maehbot supports:
 
 ## Training workflow in Maehbot
 
-1. Record a learning drive video on the mower
-2. Upload via **Training** UI or copy to `/var/lib/maehbot/videos/`
-3. Annotate frames (draw bbox, assign class)
-4. Export YOLO via API or UI → `/var/lib/maehbot/exports/yolo/session_<id>/`
+1. Record a learning drive on the mower via **Training → Anlernfahrt aufnehmen** (Start / Pause / Stopp), or upload a video file
+2. Annotate frames (draw bbox, assign class)
+3. Export YOLO via API or UI → `/var/lib/maehbot/exports/yolo/session_<id>/`
+
+Live recording is handled by **core** (camera access). The web UI sends commands via
+`/var/lib/maehbot/recording_command.json`; core writes status to `recording_status.json`.
+
+Alternatively copy a video to `/var/lib/maehbot/videos/` and register via upload API.
 
 Export layout:
 

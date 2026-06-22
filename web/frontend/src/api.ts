@@ -46,6 +46,14 @@ export interface TrainingSession {
   created_at: number;
 }
 
+export interface RecordingStatus {
+  state: "idle" | "recording" | "paused";
+  session_name: string;
+  frame_count: number;
+  session_id: number | null;
+  error: string | null;
+}
+
 export interface PlantClass {
   id: string;
   name: string;
@@ -107,6 +115,43 @@ export async function fetchClasses(): Promise<PlantClass[]> {
 export async function fetchTrainingSessions(): Promise<TrainingSession[]> {
   const r = await fetch(`${API}/training/sessions`);
   if (!r.ok) throw new Error("Sessions laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function fetchRecordingStatus(): Promise<RecordingStatus> {
+  const r = await fetch(`${API}/training/record/status`);
+  if (!r.ok) throw new Error("Aufnahmestatus laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function startRecording(name: string): Promise<RecordingStatus> {
+  const r = await fetch(`${API}/training/record/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Aufnahme starten fehlgeschlagen");
+  }
+  return r.json();
+}
+
+export async function pauseRecording(): Promise<RecordingStatus> {
+  const r = await fetch(`${API}/training/record/pause`, { method: "POST" });
+  if (!r.ok) throw new Error("Pause fehlgeschlagen");
+  return r.json();
+}
+
+export async function resumeRecording(): Promise<RecordingStatus> {
+  const r = await fetch(`${API}/training/record/resume`, { method: "POST" });
+  if (!r.ok) throw new Error("Fortsetzen fehlgeschlagen");
+  return r.json();
+}
+
+export async function stopRecording(): Promise<RecordingStatus> {
+  const r = await fetch(`${API}/training/record/stop`, { method: "POST" });
+  if (!r.ok) throw new Error("Stopp fehlgeschlagen");
   return r.json();
 }
 

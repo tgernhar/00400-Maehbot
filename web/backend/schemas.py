@@ -67,6 +67,18 @@ class TrainingSessionOut(BaseModel):
     created_at: float
 
 
+class RecordingStartIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class RecordingStatusOut(BaseModel):
+    state: str
+    session_name: str = ""
+    frame_count: int = 0
+    session_id: int | None = None
+    error: str | None = None
+
+
 class AnnotationIn(BaseModel):
     session_id: int
     frame_index: int

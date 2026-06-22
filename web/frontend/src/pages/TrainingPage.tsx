@@ -3,13 +3,26 @@ import {
   BBox,
   exportYolo,
   fetchClasses,
+  fetchRecordingStatus,
   fetchTrainingSessions,
+  pauseRecording,
   PlantClass,
+  RecordingStatus,
+  resumeRecording,
   saveAnnotation,
+  startRecording,
+  stopRecording,
   TrainingSession,
   trainingFrameUrl,
   uploadTrainingSession,
 } from "../api";
+
+function recordingLabel(status: RecordingStatus | null): string {
+  if (!status) return "—";
+  if (status.state === "recording") return `Aufnahme (${status.frame_count} Frames)`;
+  if (status.state === "paused") return `Pausiert (${status.frame_count} Frames)`;
+  return "Bereit";
+}
 
 export default function TrainingPage() {
   const [sessions, setSessions] = useState<TrainingSession[]>([]);
@@ -18,18 +31,39 @@ export default function TrainingPage() {
   const [frameIndex, setFrameIndex] = useState(0);
   const [classId, setClassId] = useState("clover");
   const [uploadName, setUploadName] = useState("");
+  const [recordName, setRecordName] = useState("");
+  const [recording, setRecording] = useState<RecordingStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const [previewBox, setPreviewBox] = useState<BBox | null>(null);
 
+  async function refreshSessions(selectId?: number) {
+    const list = await fetchTrainingSessions();
+    setSessions(list);
+    if (selectId != null) {
+      const found = list.find((s) => s.id === selectId) ?? null;
+      if (found) {
+        setSelectedSession(found);
+        setFrameIndex(0);
+      }
+    }
+  }
+
   useEffect(() => {
-    fetchTrainingSessions().then(setSessions);
+    refreshSessions();
     fetchClasses().then((c) => {
       setClasses(c);
       if (c.length) setClassId(c[0].id);
     });
+    fetchRecordingStatus().then(setRecording).catch(() => undefined);
+    const poll = setInterval(() => {
+      fetchRecordingStatus()
+        .then(setRecording)
+        .catch(() => undefined);
+    }, 1000);
+    return () => clearInterval(poll);
   }, []);
 
   useEffect(() => {
@@ -62,6 +96,52 @@ export default function TrainingPage() {
     setFrameIndex(0);
   }
 
+  async function handleStartRecording() {
+    const name = recordName.trim() || `Anlernfahrt_${new Date().toISOString().slice(0, 10)}`;
+    try {
+      const status = await startRecording(name);
+      setRecording(status);
+      setMessage("Aufnahme gestartet — Core verarbeitet den Befehl …");
+      setTimeout(() => setMessage(null), 3000);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Start fehlgeschlagen");
+    }
+  }
+
+  async function handlePauseRecording() {
+    try {
+      const status =
+        recording?.state === "paused" ? await resumeRecording() : await pauseRecording();
+      setRecording(status);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Pause fehlgeschlagen");
+    }
+  }
+
+  async function handleStopRecording() {
+    try {
+      await stopRecording();
+      for (let i = 0; i < 10; i += 1) {
+        await new Promise((r) => setTimeout(r, 500));
+        const status = await fetchRecordingStatus();
+        setRecording(status);
+        if (status.state === "idle" && status.session_id != null) {
+          await refreshSessions(status.session_id);
+          setMessage(`Aufnahme gespeichert (${status.frame_count} Frames)`);
+          setTimeout(() => setMessage(null), 4000);
+          return;
+        }
+        if (status.error) {
+          setMessage(status.error);
+          return;
+        }
+      }
+      setMessage("Stopp gesendet — Status bitte prüfen");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Stopp fehlgeschlagen");
+    }
+  }
+
   function pointerPos(e: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
@@ -81,11 +161,46 @@ export default function TrainingPage() {
     setTimeout(() => setMessage(null), 2000);
   }
 
+  const isRecording = recording?.state === "recording" || recording?.state === "paused";
+
   return (
     <div>
       <h1>Training / Anlernen</h1>
       {message && <p className="ok">{message}</p>}
+      {recording?.error && <p className="error">{recording.error}</p>}
+
+      <section className="recording-panel">
+        <h2>Anlernfahrt aufnehmen</h2>
+        <p className="muted">
+          Start während der Fahrt — der Core speichert Kamerabilder als Video. Pause unterbricht
+          die Aufnahme, Stopp legt die Session an.
+        </p>
+        <div className="recording-controls">
+          <input
+            placeholder="Name der Anlernfahrt"
+            value={recordName}
+            onChange={(e) => setRecordName(e.target.value)}
+            disabled={isRecording}
+          />
+          <button type="button" disabled={isRecording} onClick={handleStartRecording}>
+            Start
+          </button>
+          <button
+            type="button"
+            disabled={!isRecording}
+            onClick={handlePauseRecording}
+          >
+            {recording?.state === "paused" ? "Fortsetzen" : "Pause"}
+          </button>
+          <button type="button" disabled={!isRecording} onClick={handleStopRecording}>
+            Stopp
+          </button>
+          <span className={`badge ${isRecording ? "warn" : "ok"}`}>{recordingLabel(recording)}</span>
+        </div>
+      </section>
+
       <div className="training-upload">
+        <span className="muted">Oder Video hochladen:</span>
         <input placeholder="Session-Name" value={uploadName} onChange={(e) => setUploadName(e.target.value)} />
         <input
           type="file"

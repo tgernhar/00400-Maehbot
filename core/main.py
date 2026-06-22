@@ -20,6 +20,7 @@ from storage.async_writer import AsyncStorageWriter
 from storage.database import Database
 from storage.paths import StoragePaths
 from storage.retention import RetentionManager
+from training.recording import LearningDriveRecorder
 from vision.camera import create_camera
 from vision.detector import create_detector
 from vision.pipeline import VisionPipeline
@@ -43,7 +44,11 @@ class CoreApplication:
         self.health.set_test_mode(bool(self.config.get("mode", {}).get("test_mode", True)))
         self._config_mtime = self._local_config_mtime()
         self._last_status_write = 0.0
+        self._last_recording_status_write = 0.0
         self.pipeline: VisionPipeline | None = None
+        fps = int(self.config.get("camera", {}).get("fps", 30))
+        self.recorder = LearningDriveRecorder(self.paths, self.db, fps=fps)
+        self.recorder.publish_status()
 
     def _apply_storage_root_for_dev(self) -> None:
         root = self.config.get("storage", {}).get("root_path", "/var/lib/maehbot")
@@ -107,6 +112,7 @@ class CoreApplication:
     def _on_detections(self, frame: Frame, detections: list[Detection]) -> None:
         t_schedule_start = time.monotonic()
         self.health.record_frame(frame.timestamp_ms)
+        self.recorder.write_frame(frame)
         status = self.health.build_status()
 
         for det in detections:
@@ -136,7 +142,19 @@ class CoreApplication:
                     self.paths.preview_path.write_bytes(frame.data)
                 except OSError:
                     logger.warning("Failed to write camera preview")
+            self._maybe_publish_recording_status()
             self._last_status_write = now
+
+    def _maybe_publish_recording_status(self) -> None:
+        if self.recorder.state.value == "idle":
+            return
+        now = time.monotonic()
+        if now - self._last_recording_status_write > 1.0:
+            self.recorder.publish_status()
+            self._last_recording_status_write = now
+
+    def _poll_recording(self) -> None:
+        self.recorder.poll_commands()
 
     def _write_status(self, status: SystemStatus) -> None:
         data: dict[str, Any] = {
@@ -162,6 +180,7 @@ class CoreApplication:
 
         while True:
             self.reload_config_if_changed()
+            self._poll_recording()
             if not self.pipeline.process_one():
                 time.sleep(0.01)
             else:
@@ -171,6 +190,7 @@ class CoreApplication:
     def shutdown(self) -> None:
         if self.pipeline:
             self.pipeline.stop()
+        self.recorder.shutdown()
         self.spray_controller.stop()
         self.writer.stop()
         self.gpio_backend.close()
