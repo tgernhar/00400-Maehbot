@@ -3,8 +3,9 @@ FROM python:3.12-slim-bookworm
 WORKDIR /app
 
 # liblgpio1 is Raspberry Pi OS / Ubuntu only — not in Debian bookworm apt.
+# build-essential provides libc headers (stdlib.h) needed to compile lgpio.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 swig gcc \
+    libgl1 libglib2.0-0 swig build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt pyproject.toml README.md ./
