@@ -123,6 +123,11 @@ export function detectionImageUrl(id: number): string {
   return `${API}/detections/${id}/image`;
 }
 
+export function cameraPreviewUrl(cacheBust?: number): string {
+  const q = cacheBust != null ? `?t=${cacheBust}` : "";
+  return `${API}/camera/preview${q}`;
+}
+
 export function trainingFrameUrl(sessionId: number, frameIndex: number): string {
   return `${API}/training/sessions/${sessionId}/frames/${frameIndex}/image`;
 }

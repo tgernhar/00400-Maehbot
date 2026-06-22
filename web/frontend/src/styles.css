@@ -84,6 +84,13 @@ body {
   display: block;
 }
 
+.camera-preview {
+  max-width: 100%;
+  display: block;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
 .bbox-overlay {
   position: absolute;
   top: 0;

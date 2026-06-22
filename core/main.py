@@ -131,6 +131,11 @@ class CoreApplication:
         now = time.monotonic()
         if now - self._last_status_write > 2.0:
             self._write_status(status)
+            if frame.data:
+                try:
+                    self.paths.preview_path.write_bytes(frame.data)
+                except OSError:
+                    logger.warning("Failed to write camera preview")
             self._last_status_write = now
 
     def _write_status(self, status: SystemStatus) -> None:

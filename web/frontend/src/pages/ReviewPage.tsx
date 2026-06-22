@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Detection,
+  cameraPreviewUrl,
   detectionImageUrl,
   fetchDetections,
   fetchStatus,
@@ -45,12 +46,18 @@ export default function ReviewPage() {
   const [selected, setSelected] = useState<Detection | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previewTick, setPreviewTick] = useState(0);
 
   useEffect(() => {
     fetchDetections()
       .then(setDetections)
       .catch((e) => setError(e.message));
     fetchStatus().then(setStatus).catch(() => undefined);
+    const poll = setInterval(() => {
+      fetchDetections().then(setDetections).catch(() => undefined);
+      setPreviewTick(Date.now());
+    }, 2000);
+    return () => clearInterval(poll);
   }, []);
 
   return (
@@ -59,6 +66,9 @@ export default function ReviewPage() {
       {error && <p className="error">{error}</p>}
       <div className="review-grid">
         <ul className="detection-list">
+          {detections.length === 0 && (
+            <li className="muted">Noch keine Erkennungen gespeichert.</li>
+          )}
           {detections.map((d) => (
             <li
               key={d.id}
@@ -86,7 +96,20 @@ export default function ReviewPage() {
               </p>
             </>
           ) : (
-            <p className="muted">Erkennung auswählen</p>
+            <>
+              <h2>Live-Vorschau</h2>
+              <img
+                src={cameraPreviewUrl(previewTick)}
+                alt="Kameravorschau"
+                className="camera-preview"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+              <p className="muted">
+                Erkennung auswählen oder warten, bis Unkräuter erkannt werden.
+              </p>
+            </>
           )}
         </div>
       </div>

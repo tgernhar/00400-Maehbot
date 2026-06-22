@@ -203,6 +203,17 @@ def get_detection_image(
     return FileResponse(path, media_type="image/jpeg")
 
 
+@app.get("/api/camera/preview")
+def get_camera_preview(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> Response:
+    path = state["paths"].preview_path
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Kameravorschau noch nicht verfügbar")
+    return FileResponse(path, media_type="image/jpeg")
+
+
 @app.get("/api/config/spray", response_model=SprayConfigOut)
 def get_spray_config(state: dict[str, Any] = Depends(get_app_state)) -> SprayConfigOut:
     spray = state["config"].get("spray", {})

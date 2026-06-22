@@ -15,6 +15,7 @@ class StoragePaths:
         self.db_dir = self.root / "db"
         self.db_path = self.db_dir / "maehbot.sqlite"
         self.status_path = self.root / "status.json"
+        self.preview_path = self.root / "preview.jpg"
 
     def ensure(self) -> None:
         for p in (
