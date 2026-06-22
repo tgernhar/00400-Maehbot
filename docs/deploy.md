@@ -16,7 +16,7 @@ Web UI: `http://<pi-ip>:8080`
 - **core** — realtime vision + spray loop (privileged, GPIO + camera)
 - **web** — FastAPI + React UI
 
-Shared volume `maehbot-data` maps to `/var/lib/maehbot`.
+Shared host path `/var/lib/maehbot` (bind-mounted into containers; native core uses the same path).
 
 ## Configuration on Pi
 
@@ -113,6 +113,21 @@ sudo systemctl status maehbot-core
 Adjust `User`, paths, and `WorkingDirectory` for your account (not necessarily `pi`).
 
 Keep **web** in Docker with shared `/var/lib/maehbot`.
+
+Create the host data directory once (native core runs as your user, not root):
+
+```bash
+sudo mkdir -p /var/lib/maehbot
+sudo chown "$USER:$USER" /var/lib/maehbot
+```
+
+Docker Compose bind-mounts this path so web and native core share the same SQLite DB and images.
+If you previously used the old Docker named volume, copy data once:
+
+```bash
+docker run --rm -v docker_maehbot-data:/from -v /var/lib/maehbot:/to alpine cp -an /from/. /to/
+cd ~/pi/maehbot/docker && docker compose up -d web
+```
 
 ## Safety checklist before live spray
 

@@ -7,7 +7,7 @@ services:
     privileged: true
     restart: unless-stopped
     volumes:
-      - maehbot-data:/var/lib/maehbot
+      - /var/lib/maehbot:/var/lib/maehbot
       - ../config:/app/config:ro
     devices:
       - /dev/video0:/dev/video0
@@ -24,10 +24,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - maehbot-data:/var/lib/maehbot
+      - /var/lib/maehbot:/var/lib/maehbot
       - ../config:/app/config
     depends_on:
       - core
 
-volumes:
-  maehbot-data:
