@@ -71,8 +71,8 @@ class VisionPipeline:
         detections = self.detector.detect(frame)
         t2 = time.monotonic()
         self.latency.record_frame_to_detect((t1 - t0) * 1000.0)
+        self.on_detections(frame, detections)
         if detections:
-            self.on_detections(frame, detections)
             self.latency.record_detect_to_callback((time.monotonic() - t2) * 1000.0)
         return True
 
