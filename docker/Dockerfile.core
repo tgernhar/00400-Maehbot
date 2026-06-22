@@ -2,8 +2,9 @@ FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
+# liblgpio1 is Raspberry Pi OS / Ubuntu only — not in Debian bookworm apt.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 liblgpio1 \
+    libgl1 libglib2.0-0 swig gcc \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt pyproject.toml README.md ./
@@ -15,7 +16,12 @@ COPY training ./training
 COPY core ./core
 COPY config ./config
 
-RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip download --no-deps --no-binary :all: lgpio==0.2.2.0 \
+    && tar xzf lgpio-0.2.2.0.tar.gz \
+    && PYPI=1 pip install ./lgpio-0.2.2.0 --no-deps \
+    && rm -rf lgpio-0.2.2.0 lgpio-0.2.2.0.tar.gz \
+    && pip install --no-cache-dir -e .
 
 ENV PYTHONUNBUFFERED=1
 
