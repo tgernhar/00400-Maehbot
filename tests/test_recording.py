@@ -30,6 +30,16 @@ def test_queue_and_consume_command(tmp_path: Path):
     assert consume_recording_command(paths) is None
 
 
+def test_queue_snapshot_command(tmp_path: Path):
+    paths = StoragePaths(tmp_path / "data")
+    paths.ensure()
+    queue_recording_command(paths, "snapshot", "Unkraut_1")
+    cmd = consume_recording_command(paths)
+    assert cmd is not None
+    assert cmd["action"] == "snapshot"
+    assert cmd["name"] == "Unkraut_1"
+
+
 def test_recorder_start_pause_resume_stop(tmp_path: Path):
     paths = StoragePaths(tmp_path / "data")
     paths.ensure()

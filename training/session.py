@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import time
 from pathlib import Path
 
 from storage.database import Database
 from storage.paths import StoragePaths
+
+_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _safe_stem(name: str) -> str:
+    cleaned = re.sub(r"[^\w\-]+", "_", name.strip(), flags=re.UNICODE)
+    return cleaned.strip("_") or "anlernfahrt"
 
 
 def register_video_session(
@@ -34,7 +42,34 @@ def register_video_session(
     }
 
 
+def register_snapshot_session(
+    paths: StoragePaths,
+    db: Database,
+    name: str,
+    jpeg_bytes: bytes,
+) -> dict:
+    paths.ensure()
+    stem = _safe_stem(name or "Foto")
+    display_name = name.strip() or stem
+    dest = paths.videos / f"{int(time.time())}_{stem}.jpg"
+    dest.write_bytes(jpeg_bytes)
+    session_id = db.insert_training_session(
+        name=display_name,
+        video_path=str(dest),
+        frame_count=1,
+        created_at=time.time(),
+    )
+    return {
+        "id": session_id,
+        "name": display_name,
+        "video_path": str(dest),
+        "frame_count": 1,
+    }
+
+
 def _count_frames(video_path: Path) -> int:
+    if video_path.suffix.lower() in _IMAGE_SUFFIXES:
+        return 1 if video_path.is_file() else 0
     try:
         import cv2
 
@@ -47,6 +82,11 @@ def _count_frames(video_path: Path) -> int:
 
 
 def extract_frame_jpeg(video_path: str, frame_index: int) -> bytes | None:
+    path = Path(video_path)
+    if path.suffix.lower() in _IMAGE_SUFFIXES:
+        if frame_index != 0 or not path.is_file():
+            return None
+        return path.read_bytes()
     try:
         import cv2
         from PIL import Image

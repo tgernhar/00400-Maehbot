@@ -204,3 +204,19 @@ button {
   min-width: 220px;
   padding: 0.5rem;
 }
+
+.recording-controls .icon-btn {
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.45rem 0.65rem;
+}
+
+.recording-live {
+  margin-top: 1rem;
+}
+
+.recording-live .camera-preview {
+  max-height: 360px;
+  object-fit: contain;
+  background: #0a0e12;
+}

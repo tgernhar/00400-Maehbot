@@ -155,6 +155,19 @@ export async function stopRecording(): Promise<RecordingStatus> {
   return r.json();
 }
 
+export async function captureSnapshot(name: string): Promise<RecordingStatus> {
+  const r = await fetch(`${API}/training/record/snapshot`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Foto aufnehmen fehlgeschlagen");
+  }
+  return r.json();
+}
+
 export async function uploadTrainingSession(name: string, file: File): Promise<TrainingSession> {
   const fd = new FormData();
   fd.append("name", name);

@@ -363,6 +363,45 @@ def stop_recording(
     return RecordingStatusOut(**read_recording_status(state["paths"]))
 
 
+@app.post("/api/training/record/snapshot", response_model=RecordingStatusOut)
+def snapshot_recording(
+    body: RecordingStartIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> RecordingStatusOut:
+    current = read_recording_status(state["paths"])
+    if current.get("state") in ("recording", "paused"):
+        raise HTTPException(
+            status_code=409,
+            detail="Während Videoaufnahme kein Einzelfoto möglich",
+        )
+    name = body.name.strip() or "Foto"
+    queue_recording_command(state["paths"], "snapshot", name)
+    # #region agent log
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+
+        _Path("debug-bc4e4e.log").open("a", encoding="utf-8").write(
+            _json.dumps(
+                {
+                    "sessionId": "bc4e4e",
+                    "runId": "api",
+                    "hypothesisId": "H1",
+                    "location": "web/backend/app.py:snapshot_recording",
+                    "message": "snapshot command queued",
+                    "data": {"name": name},
+                    "timestamp": int(time.time() * 1000),
+                }
+            )
+            + "\n"
+        )
+    except OSError:
+        pass
+    # #endregion
+    return RecordingStatusOut(**read_recording_status(state["paths"]))
+
+
 @app.get("/api/training/sessions/{session_id}/frames/{frame_index}/image")
 def get_training_frame(
     session_id: int,
@@ -442,10 +481,40 @@ def export_yolo(
     return {"export_path": str(export_dir)}
 
 
-# Static frontend
+# Static frontend (SPA: API routes above; assets + index.html fallback below)
 _frontend_dist = get_project_root() / "web" / "frontend" / "dist"
-if _frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="static")
+
+
+def _register_frontend_routes() -> None:
+    if not _frontend_dist.is_dir():
+        logger.warning("Frontend dist missing at %s — build web/frontend first", _frontend_dist)
+        return
+
+    assets_dir = _frontend_dist / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    index_html = _frontend_dist / "index.html"
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str = "") -> FileResponse:
+        if full_path.startswith("api") or full_path.startswith("assets/"):
+            raise HTTPException(status_code=404)
+        if full_path:
+            candidate = (_frontend_dist / full_path).resolve()
+            try:
+                candidate.relative_to(_frontend_dist.resolve())
+            except ValueError:
+                raise HTTPException(status_code=404) from None
+            if candidate.is_file():
+                return FileResponse(candidate)
+        if not index_html.is_file():
+            raise HTTPException(status_code=404, detail="Frontend index missing")
+        return FileResponse(index_html)
+
+
+_register_frontend_routes()
 
 
 def run() -> None:

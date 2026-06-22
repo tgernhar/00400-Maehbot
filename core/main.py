@@ -20,7 +20,14 @@ from storage.async_writer import AsyncStorageWriter
 from storage.database import Database
 from storage.paths import StoragePaths
 from storage.retention import RetentionManager
-from training.recording import LearningDriveRecorder
+from training.recording import (
+    LearningDriveRecorder,
+    RecordingState,
+    consume_recording_command,
+    default_recording_status,
+    write_recording_status,
+)
+from training.session import register_snapshot_session
 from vision.camera import create_camera
 from vision.detector import create_detector
 from vision.pipeline import VisionPipeline
@@ -49,6 +56,7 @@ class CoreApplication:
         fps = int(self.config.get("camera", {}).get("fps", 30))
         self.recorder = LearningDriveRecorder(self.paths, self.db, fps=fps)
         self.recorder.publish_status()
+        self._last_frame: Frame | None = None
 
     def _apply_storage_root_for_dev(self) -> None:
         root = self.config.get("storage", {}).get("root_path", "/var/lib/maehbot")
@@ -111,6 +119,7 @@ class CoreApplication:
 
     def _on_detections(self, frame: Frame, detections: list[Detection]) -> None:
         t_schedule_start = time.monotonic()
+        self._last_frame = frame
         self.health.record_frame(frame.timestamp_ms)
         self.recorder.write_frame(frame)
         status = self.health.build_status()
@@ -154,7 +163,77 @@ class CoreApplication:
             self._last_recording_status_write = now
 
     def _poll_recording(self) -> None:
-        self.recorder.poll_commands()
+        command = consume_recording_command(self.paths)
+        if not command:
+            return
+        action = str(command.get("action", "")).lower()
+        if action == "snapshot":
+            self._handle_snapshot(str(command.get("name", "Foto")))
+            return
+        self.recorder.handle_command(command)
+
+    def _handle_snapshot(self, name: str) -> None:
+        if self.recorder.state != RecordingState.IDLE:
+            write_recording_status(
+                self.paths,
+                {
+                    **self.recorder.status_dict(),
+                    "error": "Während Videoaufnahme kein Einzelfoto möglich",
+                },
+            )
+            return
+        if not self._last_frame or not self._last_frame.data:
+            write_recording_status(
+                self.paths,
+                {**default_recording_status(), "error": "Kein Kamerabild verfügbar"},
+            )
+            return
+        try:
+            result = register_snapshot_session(
+                self.paths,
+                self.db,
+                name,
+                self._last_frame.data,
+            )
+            write_recording_status(
+                self.paths,
+                {
+                    "state": RecordingState.IDLE.value,
+                    "session_name": result["name"],
+                    "frame_count": 1,
+                    "session_id": result["id"],
+                    "error": None,
+                },
+            )
+            logger.info("Training snapshot saved as session %s", result["id"])
+            # #region agent log
+            try:
+                import json as _json
+                from pathlib import Path as _Path
+
+                _Path("debug-bc4e4e.log").open("a", encoding="utf-8").write(
+                    _json.dumps(
+                        {
+                            "sessionId": "bc4e4e",
+                            "runId": "core",
+                            "hypothesisId": "H3",
+                            "location": "core/main.py:_handle_snapshot",
+                            "message": "snapshot session registered",
+                            "data": {"session_id": result["id"], "name": result["name"]},
+                            "timestamp": int(time.time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+            except OSError:
+                pass
+            # #endregion
+        except Exception as exc:
+            logger.exception("Training snapshot failed")
+            write_recording_status(
+                self.paths,
+                {**default_recording_status(), "error": str(exc)},
+            )
 
     def _write_status(self, status: SystemStatus) -> None:
         data: dict[str, Any] = {

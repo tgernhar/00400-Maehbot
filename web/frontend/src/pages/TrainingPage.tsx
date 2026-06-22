@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   BBox,
+  cameraPreviewUrl,
+  captureSnapshot,
   exportYolo,
   fetchClasses,
   fetchRecordingStatus,
@@ -34,6 +36,7 @@ export default function TrainingPage() {
   const [recordName, setRecordName] = useState("");
   const [recording, setRecording] = useState<RecordingStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [previewTick, setPreviewTick] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
@@ -65,6 +68,15 @@ export default function TrainingPage() {
     }, 1000);
     return () => clearInterval(poll);
   }, []);
+
+  useEffect(() => {
+    if (!recording || (recording.state !== "recording" && recording.state !== "paused")) {
+      return;
+    }
+    setPreviewTick(Date.now());
+    const id = setInterval(() => setPreviewTick(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [recording?.state]);
 
   useEffect(() => {
     drawFrame();
@@ -142,6 +154,48 @@ export default function TrainingPage() {
     }
   }
 
+  async function handleCaptureSnapshot() {
+    const name =
+      recordName.trim() ||
+      `Foto_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}`;
+    try {
+      await captureSnapshot(name);
+      // #region agent log
+      fetch("http://127.0.0.1:7350/ingest/6180ef00-058c-42a8-86a0-0e6278a26d8a", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "bc4e4e" },
+        body: JSON.stringify({
+          sessionId: "bc4e4e",
+          runId: "ui",
+          hypothesisId: "H2",
+          location: "TrainingPage.tsx:handleCaptureSnapshot",
+          message: "snapshot API accepted",
+          data: { name },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      for (let i = 0; i < 10; i += 1) {
+        await new Promise((r) => setTimeout(r, 500));
+        const status = await fetchRecordingStatus();
+        setRecording(status);
+        if (status.session_id != null && status.frame_count >= 1) {
+          await refreshSessions(status.session_id);
+          setMessage("Foto gespeichert — Annotation möglich");
+          setTimeout(() => setMessage(null), 4000);
+          return;
+        }
+        if (status.error) {
+          setMessage(status.error);
+          return;
+        }
+      }
+      setMessage("Foto-Befehl gesendet — Status bitte prüfen");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Foto fehlgeschlagen");
+    }
+  }
+
   function pointerPos(e: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
@@ -173,7 +227,7 @@ export default function TrainingPage() {
         <h2>Anlernfahrt aufnehmen</h2>
         <p className="muted">
           Start während der Fahrt — der Core speichert Kamerabilder als Video. Pause unterbricht
-          die Aufnahme, Stopp legt die Session an.
+          die Aufnahme, Stopp legt die Session an. Alternativ ein Einzelfoto mit dem Kamera-Button.
         </p>
         <div className="recording-controls">
           <input
@@ -187,6 +241,16 @@ export default function TrainingPage() {
           </button>
           <button
             type="button"
+            className="icon-btn"
+            disabled={isRecording}
+            onClick={handleCaptureSnapshot}
+            title="Einzelfoto aufnehmen"
+            aria-label="Einzelfoto aufnehmen"
+          >
+            📷
+          </button>
+          <button
+            type="button"
             disabled={!isRecording}
             onClick={handlePauseRecording}
           >
@@ -197,6 +261,19 @@ export default function TrainingPage() {
           </button>
           <span className={`badge ${isRecording ? "warn" : "ok"}`}>{recordingLabel(recording)}</span>
         </div>
+        {isRecording && (
+          <div className="recording-live">
+            <p className="muted">Livebild während der Aufnahme</p>
+            <img
+              src={cameraPreviewUrl(previewTick)}
+              alt="Livebild"
+              className="camera-preview"
+              onError={(e) => {
+                e.currentTarget.style.opacity = "0.35";
+              }}
+            />
+          </div>
+        )}
       </section>
 
       <div className="training-upload">
