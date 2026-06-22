@@ -1,5 +1,6 @@
 services:
   core:
+    profiles: ["docker-core"]
     build:
       context: ..
       dockerfile: docker/Dockerfile.core
@@ -26,6 +27,4 @@ services:
     volumes:
       - /var/lib/maehbot:/var/lib/maehbot
       - ../config:/app/config
-    depends_on:
-      - core
 

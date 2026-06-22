@@ -1,0 +1,15 @@
+[Unit]
+Description=Maehbot Core (vision + spray)
+After=network.target
+
+[Service]
+Type=simple
+User=tgernhar
+WorkingDirectory=/home/tgernhar/pi/maehbot
+Environment=MAEHBOT_CONFIG_DIR=/home/tgernhar/pi/maehbot/config
+ExecStart=/home/tgernhar/pi/maehbot/.venv/bin/python -m core.main
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

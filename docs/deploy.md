@@ -76,7 +76,10 @@ Stop the Docker **core** container when running core on the host (only one core 
 ```bash
 cd ~/pi/maehbot/docker
 docker compose stop core
+docker compose up -d web
 ```
+
+Core in Docker is optional (`docker compose --profile docker-core up -d`). Default `docker compose up -d web` starts **web only**.
 
 Keep **web** in Docker. Shared data: `/var/lib/maehbot` (set in `config/local.yaml`).
 
