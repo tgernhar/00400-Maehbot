@@ -51,6 +51,8 @@ class CoreApplication:
         self.health.set_test_mode(bool(self.config.get("mode", {}).get("test_mode", True)))
         self._config_mtime = self._local_config_mtime()
         self._last_status_write = 0.0
+        self._last_preview_write = 0.0
+        self._preview_interval_s = self._preview_interval_from_config()
         self._last_recording_status_write = 0.0
         self.pipeline: VisionPipeline | None = None
         fps = int(self.config.get("camera", {}).get("fps", 30))
@@ -100,6 +102,10 @@ class CoreApplication:
         p = get_config_dir() / "local.yaml"
         return p.stat().st_mtime if p.exists() else 0.0
 
+    def _preview_interval_from_config(self) -> float:
+        preview_fps = float(self.config.get("camera", {}).get("preview_fps", 5))
+        return 1.0 / max(preview_fps, 0.5)
+
     def reload_config_if_changed(self) -> None:
         mtime = self._local_config_mtime()
         if mtime == self._config_mtime:
@@ -115,6 +121,7 @@ class CoreApplication:
         )
         self.spray_controller.update_duration(float(spray_cfg.get("duration_ms", 100)))
         self.health.set_test_mode(bool(self.config.get("mode", {}).get("test_mode", True)))
+        self._preview_interval_s = self._preview_interval_from_config()
         logger.info("Config reloaded from local.yaml")
 
     def _on_detections(self, frame: Frame, detections: list[Detection]) -> None:
@@ -144,13 +151,15 @@ class CoreApplication:
             self.writer.enqueue(event)
 
         now = time.monotonic()
+        if frame.data and now - self._last_preview_write >= self._preview_interval_s:
+            try:
+                self.paths.preview_path.write_bytes(frame.data)
+                self._last_preview_write = now
+            except OSError:
+                logger.warning("Failed to write camera preview")
+
         if now - self._last_status_write > 2.0:
             self._write_status(status)
-            if frame.data:
-                try:
-                    self.paths.preview_path.write_bytes(frame.data)
-                except OSError:
-                    logger.warning("Failed to write camera preview")
             self._maybe_publish_recording_status()
             self._last_status_write = now
 

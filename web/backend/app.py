@@ -214,7 +214,11 @@ def get_camera_preview(
     path = state["paths"].preview_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Kameravorschau noch nicht verfügbar")
-    return FileResponse(path, media_type="image/jpeg")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 @app.get("/api/config/spray", response_model=SprayConfigOut)

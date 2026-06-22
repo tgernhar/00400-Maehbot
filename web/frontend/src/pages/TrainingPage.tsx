@@ -74,7 +74,7 @@ export default function TrainingPage() {
   useEffect(() => {
     if (!liveActive) return;
     setPreviewTick(Date.now());
-    const id = setInterval(() => setPreviewTick(Date.now()), 500);
+    const id = setInterval(() => setPreviewTick(Date.now()), 200);
     return () => clearInterval(id);
   }, [liveActive]);
 

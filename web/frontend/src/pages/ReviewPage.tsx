@@ -56,7 +56,7 @@ export default function ReviewPage() {
     const poll = setInterval(() => {
       fetchDetections().then(setDetections).catch(() => undefined);
       setPreviewTick(Date.now());
-    }, 2000);
+    }, 500);
     return () => clearInterval(poll);
   }, []);
 
