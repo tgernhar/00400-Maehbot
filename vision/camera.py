@@ -96,17 +96,25 @@ class Picamera2Camera(Camera):
             self._picam = None
 
 
+def _picamera2_available() -> bool:
+    try:
+        from picamera2 import Picamera2  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
 def create_camera(config: dict, force_mock: bool = False) -> Camera:
     fps = int(config.get("camera", {}).get("fps", 30))
     inference = config.get("detection", {}).get("inference_target", "imx500")
     if force_mock or sys.platform != "linux":
         return MockCamera(fps=fps)
     if inference == "imx500" or inference == "pi_cpu":
-        try:
+        if _picamera2_available():
             return Picamera2Camera(fps=fps)
-        except Exception:
-            logger.warning("Picamera2 unavailable, using MockCamera")
-            return MockCamera(fps=fps)
+        logger.warning("Picamera2 unavailable, using MockCamera")
+        return MockCamera(fps=fps)
     return MockCamera(fps=fps)
 
 

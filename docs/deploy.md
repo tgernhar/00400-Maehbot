@@ -44,6 +44,42 @@ ssh pi@<pi-ip> "cd maehbot/docker && docker compose up -d --build"
 
 Or use git pull on the Pi if the repo is hosted remotely.
 
+## Native core on Pi (systemd)
+
+Raspberry Pi OS blocks system-wide `pip` (PEP 668). Use a **venv** and install
+`picamera2` / `lgpio` via **apt**, not plain `pip install` on the system Python.
+
+Quick setup (from repo root on the Pi):
+
+```bash
+cd ~/pi/maehbot
+bash scripts/setup-pi-host.sh
+source .venv/bin/activate
+python -m core.main
+```
+
+Manual equivalent:
+
+```bash
+sudo apt-get install -y python3-venv python3-picamera2 python3-lgpio
+python3 -m venv .venv --system-site-packages
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+```
+
+Do **not** run `pip install` without activating `.venv` first.
+Do **not** use shell syntax like `pip install ... + picamera2`; use apt for Pi camera/GPIO packages.
+
+Stop the Docker **core** container when running core on the host (only one core process):
+
+```bash
+cd ~/pi/maehbot/docker
+docker compose stop core
+```
+
+Keep **web** in Docker. Shared data: `/var/lib/maehbot` (set in `config/local.yaml`).
+
 ## systemd fallback for core
 
 If Docker cannot access GPIO or camera reliably, run core on the host:
@@ -56,14 +92,25 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/maehbot
-ExecStart=/home/pi/maehbot/.venv/bin/python -m core.main
+User=tgernhar
+WorkingDirectory=/home/tgernhar/pi/maehbot
+Environment=MAEHBOT_CONFIG_DIR=/home/tgernhar/pi/maehbot/config
+ExecStart=/home/tgernhar/pi/maehbot/.venv/bin/python -m core.main
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+Enable:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now maehbot-core
+sudo systemctl status maehbot-core
+```
+
+Adjust `User`, paths, and `WorkingDirectory` for your account (not necessarily `pi`).
 
 Keep **web** in Docker with shared `/var/lib/maehbot`.
 
