@@ -1,0 +1,8 @@
+# Copy to config/local.yaml and adjust for your Raspberry Pi (not in git)
+
+# Example overrides:
+# storage:
+#   root_path: ./data/maehbot   # for local dev on Windows
+# gpio:
+#   nozzle_valve: 17
+#   pump: 27

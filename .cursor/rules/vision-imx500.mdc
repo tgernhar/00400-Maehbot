@@ -1,0 +1,29 @@
+---
+description: IMX500 camera pipeline and detection
+globs: vision/**/*,**/imx500*,**/detection*.py
+alwaysApply: false
+---
+
+# Vision & IMX500
+
+## Pipeline
+
+- Primary inference: **on IMX500** (Sony firmware / deployed model).
+- Fallback: Pi CPU only if IMX500 insufficient — keep same detection interface.
+- Support both stock Sony models and **custom trained** models (YOLO export → IMX500 toolchain).
+
+## Classes
+
+Multi-class: grass, clover, dandelion, other weed types — extensible enum in config.
+Map classes to actions: spray vs ignore (e.g. grass → never spray).
+
+## Detection output (required for spray)
+
+Each detection must include: `bbox`, `class_id`, `confidence`, `frame_timestamp_ms`, `image_coords`.
+No spray without valid bbox + confidence ≥ `min_confidence` (default in config, tunable after field tests).
+
+## Camera
+
+- Default 30 fps while driving; configurable.
+- picamera2 / libcamera stack for Pi 5 + IMX500.
+- Keep inference path separate from JPEG encoding for web (encode only for storage/review).

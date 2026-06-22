@@ -1,0 +1,32 @@
+---
+description: FastAPI REST conventions
+globs: web/backend/**/*,**/api/**/*.py
+alwaysApply: false
+---
+
+# API (FastAPI + REST)
+
+## Scope
+
+REST only (no WebSocket in MVP). Live preview optional later via polled endpoints or separate stream.
+
+## Network
+
+- Local WLAN only; bind to Pi LAN interface.
+- Auth: implement JWT or session auth, but `auth_enabled: false` in config skips auth for early testing.
+
+## Core endpoints (MVP)
+
+- `GET /api/detections?limit=100` — last N for review UI
+- `GET /api/detections/{id}/image` — image with optional bbox overlay server-side or bbox JSON for client draw
+- `GET/PUT /api/config/spray` — delay_ms, duration_ms, speed, camera_nozzle_distance
+- `GET/PUT /api/config/mode` — test_mode, min_confidence
+- `POST /api/training/sessions` — upload/register learning-drive video
+- `GET /api/training/sessions/{id}/frames` — frame list for scrubbing
+- `POST /api/training/annotations` — bbox + class per frame (JSON)
+
+## Rules
+
+- API never triggers spray directly; only updates config read by core.
+- Use Pydantic models; OpenAPI at `/docs`.
+- German error messages for UI-facing `detail` fields where user-visible.

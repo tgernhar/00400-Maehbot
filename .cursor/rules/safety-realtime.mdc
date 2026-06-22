@@ -1,0 +1,35 @@
+---
+description: Fail-safe, test mode, spray guards
+globs: spray/**/*,vision/**/*,**/safety*.py
+alwaysApply: false
+---
+
+# Safety & Real-Time Rules
+
+## Spray guards (never bypass)
+
+1. Valid bounding box (positive area, within frame).
+2. `confidence >= min_confidence`.
+3. Class marked as sprayable in config.
+4. Tank not empty (GPIO `tank_empty` inactive).
+5. Camera pipeline healthy (recent frames).
+6. **Not** in `test_mode` (test mode = detect + log only).
+
+## Test mode
+
+- `test_mode: true` → record detections and images, **never** activate GPIO spray/pump.
+- Toggle via config/UI; default `true` until user enables live spray.
+
+## Fail-safe
+
+| Condition | Action |
+|-----------|--------|
+| Camera failure / no frames | Stop spraying, log error |
+| WLAN down | Core keeps running; web UI unavailable is OK |
+| Tank empty GPIO | Block all spray, surface status in UI |
+| Ambiguous tank sensors | Treat as empty, block spray |
+
+## Latency
+
+- Target: ≤ **10 ms** from frame timestamp to spray schedule decision in core process.
+- Profile with logging; avoid locks and sync I/O in detection→spray path.

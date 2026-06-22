@@ -1,0 +1,36 @@
+---
+description: Paths, retention, training export
+globs: "**/storage*.py,**/models/**/*,training/**/*"
+alwaysApply: false
+---
+
+# Data & Storage
+
+## Root path
+
+`/var/lib/maehbot/` on Pi (Docker volume mount).
+
+```
+/var/lib/maehbot/
+  images/          # detection snapshots (ring buffer)
+  videos/          # learning drives
+  annotations/     # JSON per session
+  exports/yolo/    # YOLO training exports
+  db/maehbot.sqlite
+```
+
+## Retention
+
+- UI default: show last **100** detections.
+- Archive max **1000** images; delete oldest when limit exceeded.
+- Hard cap **10 GB** total under `/var/lib/maehbot/`; prune images before videos.
+
+## Formats
+
+- App annotations: **JSON** (frame index, bbox, class_id, session_id).
+- Model training export: **YOLO** (images + labels); convert for IMX500 deployment separately.
+- SQLite: detection metadata only (paths, bbox, class, confidence, timestamp) — not image blobs.
+
+## Writes
+
+- Core: async/background write after spray event; never block hot path.

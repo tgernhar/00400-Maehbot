@@ -1,0 +1,30 @@
+---
+description: PC dev, Pi deploy, tests, Docker
+globs: docker/**/*,**/Dockerfile*,compose*.yml,tests/**/*
+alwaysApply: false
+---
+
+# Development Workflow
+
+## Environment
+
+- Develop on **Windows PC**; deploy to **Raspberry Pi 5** (Python 3.12).
+- Git: single developer; conventional commits optional.
+
+## Deploy
+
+- Primary: `docker compose` — services `core` + `web`, shared volume `maehbot-data`.
+- `core`: privileged, camera + GPIO devices; owns realtime loop.
+- `web`: FastAPI + React build; no GPIO.
+- Fallback: `core` as **systemd** on host if Docker device access blocks testing.
+
+## Tests
+
+- Unit tests on PC (mock GPIO, mock detection).
+- Unit + integration tests on Pi (real GPIO/camera markers).
+- Never require spray in CI; use test_mode and GPIO mocks.
+
+## Local dev
+
+- Run FastAPI + React dev server on PC; vision/spray modules testable with mocks.
+- Document `config/local.yaml` for Pi-specific pins and paths.

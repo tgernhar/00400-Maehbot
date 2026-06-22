@@ -1,0 +1,28 @@
+---
+description: React browser UI
+globs: web/frontend/**/*,*.{tsx,jsx}
+alwaysApply: false
+---
+
+# Frontend (React)
+
+## Stack
+
+- React + TypeScript (Vite recommended).
+- German UI labels; English code.
+
+## Pages (MVP)
+
+1. **Review** — scrollable list of last 100 detections (up to 1000 archived); thumbnail, class, confidence, timestamp; full image with **bbox overlay**.
+2. **Spray settings** — delay (ms), duration (ms), speed, camera–nozzle distance; test mode toggle.
+3. **Training** — select learning session, video frame scrubber, draw rectangle, assign class, save annotation.
+
+## API
+
+- REST only; axios or fetch to FastAPI backend.
+- Auth hook ready but disabled when `auth_enabled` false (dev banner in UI).
+
+## UX
+
+- Show tank level + test mode + spray blocked reasons clearly.
+- No spray controls in UI that bypass core safety (settings only).

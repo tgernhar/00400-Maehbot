@@ -1,0 +1,36 @@
+---
+description: GPIO, nozzle timing, pump, tank sensors
+globs: spray/**/*,**/gpio*,**/spray*.py
+alwaysApply: false
+---
+
+# Hardware & Spray Control
+
+## GPIO
+
+- Nozzle valve + active pump: GPIO outputs (exact pins in `config/hardware.yaml`).
+- Tank level: 2 digital GPIO inputs — `tank_full`, `tank_empty`.
+- Do not spray if `tank_empty` active or `tank_full` logic indicates fault.
+
+## Defaults (all configurable in config/UI)
+
+| Parameter | Default | Unit |
+|-----------|---------|------|
+| `camera_to_nozzle_mm` | 20 | mm |
+| `mower_speed_mm_s` | 100 | mm/s (0.1 m/s) |
+| `spray_delay_ms` | user-set | ms (added to travel time) |
+| `spray_duration_ms` | user-set | ms |
+| `camera_fps` | 30 | fps |
+
+## Timing
+
+```python
+travel_ms = (camera_to_nozzle_mm / mower_speed_mm_s) * 1000.0
+fire_at_ms = detection_timestamp_ms + spray_delay_ms + travel_ms
+```
+
+Schedule GPIO fire at `fire_at_ms`; duration = `spray_duration_ms`. Use monotonic clock, not wall clock.
+
+## Power
+
+- Pi + pump on dedicated battery (not mower battery). Document wiring in `docs/hardware.md` when added.

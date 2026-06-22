@@ -1,0 +1,6 @@
+# GPIO BCM pin numbers — adjust on the Pi via config/local.yaml
+gpio:
+  nozzle_valve: 17
+  pump: 27
+  tank_full: 22
+  tank_empty: 23

@@ -1,0 +1,36 @@
+---
+description: Maehbot – Ziel, Architektur, Konventionen
+alwaysApply: true
+---
+
+# Maehbot Project Overview
+
+Raspberry Pi 5 + Sony IMX500 on a lawn mower robot: detect weeds while mowing,
+trigger a micro-dosing nozzle aligned with the camera. Browser UI over local WLAN
+for review, training annotation, and spray timing settings.
+
+## Architecture (mandatory)
+
+- **core process** (`vision` + `spray`): real-time loop, target latency camera→GPIO ≤ 10 ms.
+  No HTTP, no blocking DB writes, no Docker network hops in the hot path.
+- **web process** (`web`): FastAPI REST + React static build. Config, review, training only.
+- IPC: shared config file (YAML) + SQLite on shared volume; core reads config, never waits on web.
+
+## Repo layout
+
+```
+vision/      # camera, IMX500, detection
+spray/       # nozzle timing, GPIO
+training/    # learning drive, annotation export
+web/         # FastAPI backend + React frontend
+config/      # defaults; local overrides gitignored
+tests/
+```
+
+## Conventions
+
+- Code, identifiers, comments: **English**
+- User-facing UI strings: **German**
+- Agent communication with user: **German**
+- Python **3.12** target
+- Secrets never in git; use `config/local.yaml` (gitignored)

@@ -1,0 +1,60 @@
+# Maehbot default configuration
+# Override per machine in config/local.yaml (gitignored)
+
+# --- Spray & motion ---
+spray:
+  delay_ms: 0              # user delay added before travel time
+  duration_ms: 100         # GPIO active duration for nozzle + pump
+  camera_to_nozzle_mm: 20  # distance camera → nozzle along travel axis
+  mower_speed_mm_s: 100    # 0.1 m/s
+
+# --- Camera ---
+camera:
+  fps: 30
+  # resolution set when IMX500 pipeline is configured
+
+# --- Detection ---
+detection:
+  min_confidence: 0.75
+  inference_target: imx500  # imx500 | pi_cpu
+
+# Plant classes: id, name, sprayable
+classes:
+  - id: grass
+    name: Grass
+    sprayable: false
+  - id: clover
+    name: Clover
+    sprayable: true
+  - id: dandelion
+    name: Dandelion
+    sprayable: true
+  - id: unknown_weed
+    name: Unknown weed
+    sprayable: true
+
+# --- Mode ---
+mode:
+  test_mode: true          # true = detect only, no GPIO spray
+
+# --- Storage ---
+storage:
+  root_path: /var/lib/maehbot
+  ui_detection_limit: 100
+  max_archived_images: 1000
+  max_total_bytes: 10737418240  # 10 GB
+
+# --- Web / API ---
+web:
+  host: "0.0.0.0"
+  port: 8080
+  auth_enabled: false        # skip auth for early testing
+  local_wlan_only: true
+
+# --- GPIO (pins set in config/hardware.yaml or local.yaml) ---
+# hardware.yaml example structure — copy to local.yaml with real BCM pins:
+# gpio:
+#   nozzle_valve: 17
+#   pump: 27
+#   tank_full: 22
+#   tank_empty: 23

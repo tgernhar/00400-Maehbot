@@ -1,0 +1,171 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #0f1419;
+  color: #e8eaed;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.nav {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #333;
+}
+
+.nav a {
+  color: #7eb8ff;
+  text-decoration: none;
+}
+
+.status-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: #333;
+  font-size: 0.85rem;
+}
+
+.badge.warn { background: #8a5a00; }
+.badge.error { background: #8a1f1f; }
+.badge.ok { background: #1f6a3a; }
+.badge.info { background: #2a4a6a; }
+
+.review-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 1rem;
+}
+
+.detection-list {
+  list-style: none;
+  padding: 0;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.detection-list li {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.detection-list li.active,
+.detection-list li:hover {
+  background: #1e2833;
+}
+
+.bbox-container {
+  position: relative;
+  max-width: 100%;
+}
+
+.bbox-container img {
+  max-width: 100%;
+  display: block;
+}
+
+.bbox-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.form-grid {
+  display: grid;
+  gap: 1rem;
+  max-width: 400px;
+}
+
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form-grid input[type="number"] {
+  padding: 0.5rem;
+}
+
+.checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.muted { color: #888; }
+.error { color: #ff6b6b; }
+.ok { color: #6bff9b; }
+.warn { color: #ffcc66; }
+
+.training-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 1rem;
+}
+
+.session-list {
+  list-style: none;
+  padding: 0;
+}
+
+.session-list li {
+  padding: 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.session-list li.active,
+.session-list li:hover {
+  background: #1e2833;
+}
+
+.training-canvas {
+  max-width: 100%;
+  border: 1px solid #444;
+  cursor: crosshair;
+}
+
+.hidden-img {
+  display: none;
+}
+
+.frame-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.training-upload {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
