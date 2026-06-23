@@ -3,6 +3,7 @@ import {
   BBox,
   cameraPreviewUrl,
   captureSnapshot,
+  deleteTrainingSession,
   exportYolo,
   fetchClasses,
   fetchRecordingStatus,
@@ -215,6 +216,24 @@ export default function TrainingPage() {
     setTimeout(() => setMessage(null), 2000);
   }
 
+  async function handleDeleteSession() {
+    if (!selectedSession) return;
+    const label = selectedSession.name;
+    if (!window.confirm(`Session „${label}“ inkl. Bildern und Annotationen löschen?`)) {
+      return;
+    }
+    try {
+      await deleteTrainingSession(selectedSession.id);
+      setSelectedSession(null);
+      setFrameIndex(0);
+      await refreshSessions();
+      setMessage("Session gelöscht");
+      setTimeout(() => setMessage(null), 3000);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Löschen fehlgeschlagen");
+    }
+  }
+
   const isRecording = recording?.state === "recording" || recording?.state === "paused";
 
   return (
@@ -346,6 +365,14 @@ export default function TrainingPage() {
               </select>
               <button onClick={() => exportYolo(selectedSession.id).then(setMessage)}>
                 YOLO exportieren
+              </button>
+              <button
+                type="button"
+                className="danger-btn"
+                disabled={isRecording}
+                onClick={handleDeleteSession}
+              >
+                Löschen
               </button>
             </div>
             <img

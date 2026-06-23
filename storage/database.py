@@ -169,6 +169,22 @@ class Database:
             ).fetchone()
         return dict(row) if row else None
 
+    def delete_training_session(self, session_id: int) -> bool:
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT id FROM training_sessions WHERE id = ?", (session_id,)
+                ).fetchone()
+                if not row:
+                    return False
+                conn.execute(
+                    "DELETE FROM annotations WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM training_sessions WHERE id = ?", (session_id,)
+                )
+                return True
+
     def insert_annotation(
         self,
         session_id: int,

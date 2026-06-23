@@ -67,6 +67,23 @@ def register_snapshot_session(
     }
 
 
+def delete_training_session(
+    paths: StoragePaths,
+    db: Database,
+    session_id: int,
+) -> bool:
+    session = db.get_training_session(session_id)
+    if not session:
+        return False
+    video = Path(session["video_path"])
+    if video.is_file():
+        video.unlink(missing_ok=True)
+    export_dir = paths.exports_yolo / f"session_{session_id}"
+    if export_dir.is_dir():
+        shutil.rmtree(export_dir, ignore_errors=True)
+    return db.delete_training_session(session_id)
+
+
 def _count_frames(video_path: Path) -> int:
     if video_path.suffix.lower() in _IMAGE_SUFFIXES:
         return 1 if video_path.is_file() else 0

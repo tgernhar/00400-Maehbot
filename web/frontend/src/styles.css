@@ -171,6 +171,16 @@ button {
   flex-wrap: wrap;
 }
 
+.danger-btn {
+  margin-left: auto;
+  color: #ffb4b4;
+  border-color: #663333;
+}
+
+.danger-btn:hover:not(:disabled) {
+  background: #3a1f1f;
+}
+
 .training-upload {
   display: flex;
   gap: 0.5rem;

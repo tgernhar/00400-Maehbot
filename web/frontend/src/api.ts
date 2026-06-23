@@ -177,6 +177,14 @@ export async function uploadTrainingSession(name: string, file: File): Promise<T
   return r.json();
 }
 
+export async function deleteTrainingSession(sessionId: number): Promise<void> {
+  const r = await fetch(`${API}/training/sessions/${sessionId}`, { method: "DELETE" });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Session löschen fehlgeschlagen");
+  }
+}
+
 export function detectionImageUrl(id: number): string {
   return `${API}/detections/${id}/image`;
 }

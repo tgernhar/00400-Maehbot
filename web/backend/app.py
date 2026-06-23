@@ -21,7 +21,7 @@ from storage.paths import StoragePaths
 from training.annotations import list_session_annotations, save_annotation
 from training.export_yolo import export_session_to_yolo
 from training.recording import queue_recording_command, read_recording_status
-from training.session import extract_frame_jpeg, register_video_session
+from training.session import delete_training_session, extract_frame_jpeg, register_video_session
 from web.backend.auth import (
     DEFAULT_PASSWORD,
     DEFAULT_USER,
@@ -316,6 +316,17 @@ async def create_training_session(
     tmp.write_bytes(content)
     result = register_video_session(state["paths"], state["db"], name, tmp)
     return TrainingSessionOut(**result)
+
+
+@app.delete("/api/training/sessions/{session_id}")
+def remove_training_session(
+    session_id: int,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> dict[str, bool]:
+    if not delete_training_session(state["paths"], state["db"], session_id):
+        raise HTTPException(status_code=404, detail="Session nicht gefunden")
+    return {"ok": True}
 
 
 @app.get("/api/training/record/status", response_model=RecordingStatusOut)
