@@ -47,6 +47,7 @@ from web.backend.schemas import (
     StatusOut,
     TokenOut,
     TrainingSessionOut,
+    YoloExportOut,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -485,15 +486,29 @@ def get_session_annotations(
     ]
 
 
-@app.post("/api/training/sessions/{session_id}/export-yolo")
+@app.post("/api/training/sessions/{session_id}/export-yolo", response_model=YoloExportOut)
 def export_yolo(
     session_id: int,
     state: dict[str, Any] = Depends(get_app_state),
     _user: str | None = Depends(auth_dependency),
-) -> dict[str, str]:
+) -> YoloExportOut:
+    session = state["db"].get_training_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session nicht gefunden")
     class_ids = [c["id"] for c in state["config"].get("classes", [])]
-    export_dir = export_session_to_yolo(state["paths"], state["db"], session_id, class_ids)
-    return {"export_path": str(export_dir)}
+    try:
+        result = export_session_to_yolo(state["paths"], state["db"], session_id, class_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("YOLO export failed for session %s", session_id)
+        raise HTTPException(status_code=500, detail="YOLO-Export fehlgeschlagen") from exc
+    return YoloExportOut(
+        export_path=str(result.export_dir),
+        image_count=result.image_count,
+        label_count=result.label_count,
+        annotation_count=result.annotation_count,
+    )
 
 
 # Static frontend (SPA: API routes above; assets + index.html fallback below)

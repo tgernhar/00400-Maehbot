@@ -108,3 +108,10 @@ class ClassOut(BaseModel):
     id: str
     name: str
     sprayable: bool
+
+
+class YoloExportOut(BaseModel):
+    export_path: str
+    image_count: int
+    label_count: int
+    annotation_count: int

@@ -185,6 +185,14 @@ export async function deleteTrainingSession(sessionId: number): Promise<void> {
   }
 }
 
+export async function fetchSessionAnnotations(sessionId: number): Promise<
+  { id: number; session_id: number; frame_index: number; class_id: string; bbox: BBox }[]
+> {
+  const r = await fetch(`${API}/training/sessions/${sessionId}/annotations`);
+  if (!r.ok) throw new Error("Annotationen laden fehlgeschlagen");
+  return r.json();
+}
+
 export function detectionImageUrl(id: number): string {
   return `${API}/detections/${id}/image`;
 }
@@ -217,9 +225,18 @@ export async function saveAnnotation(
   if (!r.ok) throw new Error("Annotation speichern fehlgeschlagen");
 }
 
-export async function exportYolo(sessionId: number): Promise<string> {
+export interface YoloExportResult {
+  export_path: string;
+  image_count: number;
+  label_count: number;
+  annotation_count: number;
+}
+
+export async function exportYolo(sessionId: number): Promise<YoloExportResult> {
   const r = await fetch(`${API}/training/sessions/${sessionId}/export-yolo`, { method: "POST" });
-  if (!r.ok) throw new Error("YOLO-Export fehlgeschlagen");
-  const data = await r.json();
-  return data.export_path;
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "YOLO-Export fehlgeschlagen");
+  }
+  return r.json();
 }

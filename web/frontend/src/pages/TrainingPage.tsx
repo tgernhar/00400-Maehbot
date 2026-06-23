@@ -8,6 +8,7 @@ import {
   fetchClasses,
   fetchRecordingStatus,
   fetchTrainingSessions,
+  fetchSessionAnnotations,
   pauseRecording,
   PlantClass,
   RecordingStatus,
@@ -44,6 +45,8 @@ export default function TrainingPage() {
   const imgRef = useRef<HTMLImageElement>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const [previewBox, setPreviewBox] = useState<BBox | null>(null);
+  const [annotationCount, setAnnotationCount] = useState(0);
+  const [lastExportPath, setLastExportPath] = useState<string | null>(null);
 
   async function refreshSessions(selectId?: number) {
     const list = await fetchTrainingSessions();
@@ -82,6 +85,16 @@ export default function TrainingPage() {
   useEffect(() => {
     drawFrame();
   }, [selectedSession, frameIndex]);
+
+  useEffect(() => {
+    if (!selectedSession) {
+      setAnnotationCount(0);
+      return;
+    }
+    fetchSessionAnnotations(selectedSession.id)
+      .then((rows) => setAnnotationCount(rows.length))
+      .catch(() => setAnnotationCount(0));
+  }, [selectedSession?.id, message]);
 
   function drawFrame() {
     const canvas = canvasRef.current;
@@ -211,9 +224,24 @@ export default function TrainingPage() {
   async function saveBox(box: BBox) {
     if (!selectedSession) return;
     await saveAnnotation(selectedSession.id, frameIndex, classId, box);
+    setAnnotationCount((c) => c + 1);
     setMessage("Annotation gespeichert");
     setPreviewBox(null);
     setTimeout(() => setMessage(null), 2000);
+  }
+
+  async function handleExportYolo() {
+    if (!selectedSession) return;
+    try {
+      const result = await exportYolo(selectedSession.id);
+      setLastExportPath(result.export_path);
+      setMessage(
+        `Export OK: ${result.image_count} Bild(er), ${result.annotation_count} Annotation(en). ` +
+          `Gespeichert unter ${result.export_path}`,
+      );
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "YOLO-Export fehlgeschlagen");
+    }
   }
 
   async function handleDeleteSession() {
@@ -363,7 +391,8 @@ export default function TrainingPage() {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <button onClick={() => exportYolo(selectedSession.id).then(setMessage)}>
+              <span className="muted">{annotationCount} Annotation(en)</span>
+              <button type="button" onClick={handleExportYolo}>
                 YOLO exportieren
               </button>
               <button
@@ -414,6 +443,17 @@ export default function TrainingPage() {
                 if (box.width > 4 && box.height > 4) saveBox(box);
               }}
             />
+            <p className="muted export-hint">
+              YOLO-Export legt Trainingsdaten auf dem Pi ab (images/labels + classes.txt).
+              Danach Modell extern trainieren (z. B. Ultralytics YOLO) und auf die IMX500-Kamera
+              deployen — siehe <code>docs/model-deployment.md</code> im Projekt.
+              {lastExportPath && (
+                <>
+                  {" "}
+                  Letzter Export: <code>{lastExportPath}</code>
+                </>
+              )}
+            </p>
           </div>
         )}
       </div>
