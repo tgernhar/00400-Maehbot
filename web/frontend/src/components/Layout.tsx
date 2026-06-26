@@ -27,6 +27,7 @@ export function Nav() {
     <nav className="nav">
       <strong>Maehbot</strong>
       <Link to="/">Review</Link>
+      <Link to="/drive">Fahren</Link>
       <Link to="/settings">Spray-Einstellungen</Link>
       <Link to="/training">Training</Link>
     </nav>

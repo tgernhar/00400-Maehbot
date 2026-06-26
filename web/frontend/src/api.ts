@@ -38,6 +38,23 @@ export interface ModeConfig {
   min_confidence: number;
 }
 
+export interface DriveStatus {
+  left: number;
+  right: number;
+  enabled: boolean;
+  moving: boolean;
+  max_speed: number;
+  error: string | null;
+}
+
+export interface DriveConfig {
+  enabled: boolean;
+  max_speed: number;
+  watchdog_timeout_ms: number;
+  invert_left: boolean;
+  invert_right: boolean;
+}
+
 export interface TrainingSession {
   id: number;
   name: string;
@@ -103,6 +120,44 @@ export async function updateModeConfig(cfg: Partial<ModeConfig>): Promise<ModeCo
     body: JSON.stringify(cfg),
   });
   if (!r.ok) throw new Error("Modus-Konfiguration speichern fehlgeschlagen");
+  return r.json();
+}
+
+export async function fetchDriveConfig(): Promise<DriveConfig> {
+  const r = await fetch(`${API}/config/drive`);
+  if (!r.ok) throw new Error("Fahr-Konfiguration laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function updateDriveConfig(cfg: Partial<DriveConfig>): Promise<DriveConfig> {
+  const r = await fetch(`${API}/config/drive`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cfg),
+  });
+  if (!r.ok) throw new Error("Fahr-Konfiguration speichern fehlgeschlagen");
+  return r.json();
+}
+
+export async function fetchDriveStatus(): Promise<DriveStatus> {
+  const r = await fetch(`${API}/drive/status`);
+  if (!r.ok) throw new Error("Fahrstatus laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function sendDriveCommand(left: number, right: number): Promise<DriveStatus> {
+  const r = await fetch(`${API}/drive/command`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ left, right }),
+  });
+  if (!r.ok) throw new Error("Fahrbefehl fehlgeschlagen");
+  return r.json();
+}
+
+export async function stopDrive(): Promise<DriveStatus> {
+  const r = await fetch(`${API}/drive/stop`, { method: "POST" });
+  if (!r.ok) throw new Error("Stopp fehlgeschlagen");
   return r.json();
 }
 

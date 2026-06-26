@@ -24,6 +24,14 @@ class GPIOBackend(ABC):
     def read(self, pin: int) -> bool: ...
 
     @abstractmethod
+    def setup_pwm(self, pin: int, frequency_hz: float) -> None:
+        """Claim a pin for PWM output at the given frequency, initial duty 0."""
+
+    @abstractmethod
+    def set_pwm_duty(self, pin: int, duty_percent: float) -> None:
+        """Set PWM duty cycle in percent (0..100)."""
+
+    @abstractmethod
     def close(self) -> None: ...
 
 
@@ -31,7 +39,10 @@ class MockGPIO(GPIOBackend):
     def __init__(self) -> None:
         self._outputs: dict[int, bool] = {}
         self._inputs: dict[int, bool] = {}
+        self._pwm_freq: dict[int, float] = {}
+        self.pwm: dict[int, float] = {}
         self.write_log: list[tuple[int, bool]] = []
+        self.pwm_log: list[tuple[int, float]] = []
 
     def setup_output(self, pin: int) -> None:
         self._outputs.setdefault(pin, False)
@@ -45,6 +56,15 @@ class MockGPIO(GPIOBackend):
 
     def read(self, pin: int) -> bool:
         return self._inputs.get(pin, False)
+
+    def setup_pwm(self, pin: int, frequency_hz: float) -> None:
+        self._pwm_freq[pin] = frequency_hz
+        self.pwm.setdefault(pin, 0.0)
+
+    def set_pwm_duty(self, pin: int, duty_percent: float) -> None:
+        duty = max(0.0, min(100.0, duty_percent))
+        self.pwm[pin] = duty
+        self.pwm_log.append((pin, duty))
 
     def set_input(self, pin: int, value: bool) -> None:
         self._inputs[pin] = value
@@ -63,6 +83,7 @@ class LgpioGPIO(GPIOBackend):
             raise RuntimeError("lgpio not available") from e
         self._lgpio = lgpio
         self._chip = lgpio.gpiochip_open(0)
+        self._pwm_freq: dict[int, float] = {}
 
     def setup_output(self, pin: int) -> None:
         self._lgpio.gpio_claim_output(self._chip, pin)
@@ -75,6 +96,16 @@ class LgpioGPIO(GPIOBackend):
 
     def read(self, pin: int) -> bool:
         return bool(self._lgpio.gpio_read(self._chip, pin))
+
+    def setup_pwm(self, pin: int, frequency_hz: float) -> None:
+        self._lgpio.gpio_claim_output(self._chip, pin)
+        self._pwm_freq[pin] = frequency_hz
+        self._lgpio.tx_pwm(self._chip, pin, frequency_hz, 0.0)
+
+    def set_pwm_duty(self, pin: int, duty_percent: float) -> None:
+        freq = self._pwm_freq.get(pin, 1000.0)
+        duty = max(0.0, min(100.0, duty_percent))
+        self._lgpio.tx_pwm(self._chip, pin, freq, duty)
 
     def close(self) -> None:
         self._lgpio.gpiochip_close(self._chip)

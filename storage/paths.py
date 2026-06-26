@@ -18,6 +18,8 @@ class StoragePaths:
         self.preview_path = self.root / "preview.jpg"
         self.recording_status_path = self.root / "recording_status.json"
         self.recording_command_path = self.root / "recording_command.json"
+        self.drive_status_path = self.root / "drive_status.json"
+        self.drive_command_path = self.root / "drive_command.json"
 
     def ensure(self) -> None:
         for p in (

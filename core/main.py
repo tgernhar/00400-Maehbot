@@ -12,6 +12,9 @@ from typing import Any
 from maehbot.config_loader import get_config_dir, load_config
 from maehbot.types import Detection, Frame, SprayEvent, SystemStatus
 from core.health import HealthMonitor
+from drive.command import consume_drive_command, write_drive_status
+from drive.controller import DriveController
+from drive.motor import MotorDriver, MotorPins
 from spray.controller import SprayController
 from spray.gpio import create_gpio_backend, PinMap
 from spray.safety import evaluate_spray_allowed
@@ -47,6 +50,7 @@ class CoreApplication:
         self._init_storage()
         self._init_gpio()
         self._init_spray()
+        self._init_drive()
         self.health = HealthMonitor(pins=self.pins)
         self.health.set_test_mode(bool(self.config.get("mode", {}).get("test_mode", True)))
         self._config_mtime = self._local_config_mtime()
@@ -98,6 +102,23 @@ class CoreApplication:
             duration_ms=float(spray_cfg.get("duration_ms", 100)),
         )
 
+    def _init_drive(self) -> None:
+        drive_cfg = self.config.get("drive", {})
+        motor_pins = MotorPins(self.config.get("motor", {}))
+        driver = MotorDriver(
+            self.gpio_backend,
+            motor_pins,
+            invert_left=bool(drive_cfg.get("invert_left", False)),
+            invert_right=bool(drive_cfg.get("invert_right", False)),
+        )
+        self.drive_controller = DriveController(
+            driver,
+            max_speed=float(drive_cfg.get("max_speed", 1.0)),
+            watchdog_timeout_s=float(drive_cfg.get("watchdog_timeout_ms", 1000)) / 1000.0,
+            enabled=bool(drive_cfg.get("enabled", True)),
+        )
+        self._last_drive_status_write = 0.0
+
     def _local_config_mtime(self) -> float:
         p = get_config_dir() / "local.yaml"
         return p.stat().st_mtime if p.exists() else 0.0
@@ -120,6 +141,12 @@ class CoreApplication:
             mower_speed_mm_s=float(spray_cfg.get("mower_speed_mm_s", 100)),
         )
         self.spray_controller.update_duration(float(spray_cfg.get("duration_ms", 100)))
+        drive_cfg = self.config.get("drive", {})
+        self.drive_controller.update_config(
+            max_speed=float(drive_cfg.get("max_speed", 1.0)),
+            watchdog_timeout_s=float(drive_cfg.get("watchdog_timeout_ms", 1000)) / 1000.0,
+            enabled=bool(drive_cfg.get("enabled", True)),
+        )
         self.health.set_test_mode(bool(self.config.get("mode", {}).get("test_mode", True)))
         self._preview_interval_s = self._preview_interval_from_config()
         logger.info("Config reloaded from local.yaml")
@@ -180,6 +207,18 @@ class CoreApplication:
             self._handle_snapshot(str(command.get("name", "Foto")))
             return
         self.recorder.handle_command(command)
+
+    def _poll_drive(self) -> None:
+        command = consume_drive_command(self.paths)
+        if command is not None:
+            self.drive_controller.set_speeds(
+                float(command.get("left", 0.0)),
+                float(command.get("right", 0.0)),
+            )
+        now = time.monotonic()
+        if now - self._last_drive_status_write > 0.5:
+            write_drive_status(self.paths, self.drive_controller.status_dict())
+            self._last_drive_status_write = now
 
     def _handle_snapshot(self, name: str) -> None:
         if self.recorder.state != RecordingState.IDLE:
@@ -258,6 +297,8 @@ class CoreApplication:
 
     def run(self) -> None:
         self.spray_controller.start()
+        self.drive_controller.start()
+        write_drive_status(self.paths, self.drive_controller.status_dict())
         camera = create_camera(self.config, force_mock=self.force_mock)
         detector = create_detector(self.config, force_mock=self.force_mock)
         self.pipeline = VisionPipeline(camera, detector, self._on_detections)
@@ -269,6 +310,7 @@ class CoreApplication:
         while True:
             self.reload_config_if_changed()
             self._poll_recording()
+            self._poll_drive()
             if not self.pipeline.process_one():
                 time.sleep(0.01)
             else:
@@ -280,6 +322,7 @@ class CoreApplication:
             self.pipeline.stop()
         self.recorder.shutdown()
         self.spray_controller.stop()
+        self.drive_controller.stop()
         self.writer.stop()
         self.gpio_backend.close()
 

@@ -4,3 +4,15 @@ gpio:
   pump: 27
   tank_full: 22
   tank_empty: 23
+
+# TB6612FNG motor driver pins (BCM). Left track = channel A, right track = channel B.
+# Pi pin header (physical) references in comments for wiring convenience.
+motor:
+  standby: 25      # STBY  (physical pin 22) — HIGH enables both channels
+  left_in1: 5      # AIN1  (physical pin 29)
+  left_in2: 6      # AIN2  (physical pin 31)
+  left_pwm: 12     # PWMA  (physical pin 32)
+  right_in1: 16    # BIN1  (physical pin 36)
+  right_in2: 26    # BIN2  (physical pin 37)
+  right_pwm: 13    # PWMB  (physical pin 33)
+  pwm_frequency_hz: 1000

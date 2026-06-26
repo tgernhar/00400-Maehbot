@@ -41,7 +41,7 @@ maehbot-web = "web.backend.app:run"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["maehbot*", "vision*", "spray*", "storage*", "training*", "core*", "web*"]
+include = ["maehbot*", "vision*", "spray*", "drive*", "storage*", "training*", "core*", "web*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

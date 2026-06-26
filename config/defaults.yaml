@@ -8,6 +8,14 @@ spray:
   camera_to_nozzle_mm: 20  # distance camera → nozzle along travel axis
   mower_speed_mm_s: 100    # 0.1 m/s
 
+# --- Drive (tank chassis via TB6612FNG) ---
+drive:
+  enabled: true            # false = motors stay disabled (STBY low)
+  max_speed: 1.0           # global speed cap, 0..1 (scales PWM duty)
+  watchdog_timeout_ms: 1000  # stop motors if no command within this window
+  invert_left: false       # flip direction if a track runs backwards
+  invert_right: false
+
 # --- Camera ---
 camera:
   fps: 30

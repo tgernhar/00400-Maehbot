@@ -16,6 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt pyproject.toml README.md ./
 COPY maehbot ./maehbot
+COPY spray ./spray
+COPY drive ./drive
 COPY storage ./storage
 COPY training ./training
 COPY web ./web

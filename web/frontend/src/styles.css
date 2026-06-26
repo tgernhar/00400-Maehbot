@@ -276,3 +276,59 @@ button {
   min-width: 220px;
   padding: 0.5rem;
 }
+
+.drive-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.drive-speed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 320px;
+  margin-bottom: 1rem;
+}
+
+.drive-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 80px);
+  grid-template-rows: repeat(3, 80px);
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.drive-btn {
+  font-size: 1.6rem;
+  border: 1px solid #2a4a6a;
+  background: #1e2833;
+  color: #e8eaed;
+  border-radius: 8px;
+  user-select: none;
+  touch-action: none;
+}
+
+.drive-btn:active {
+  background: #2a4a6a;
+}
+
+.drive-btn.stop {
+  border-color: #663333;
+  color: #ffb4b4;
+}
+
+.drive-config {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #141a22;
+  max-width: 420px;
+}
+
+.drive-config h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}

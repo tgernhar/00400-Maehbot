@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from drive.command import queue_drive_command, read_drive_status
 from maehbot.config_loader import get_project_root, load_config, save_local_config
 from storage.database import Database
 from storage.paths import StoragePaths
@@ -37,6 +38,10 @@ from web.backend.schemas import (
     BBoxSchema,
     ClassOut,
     DetectionOut,
+    DriveCommandIn,
+    DriveConfigIn,
+    DriveConfigOut,
+    DriveStatusOut,
     LoginIn,
     ModeConfigIn,
     ModeConfigOut,
@@ -294,6 +299,70 @@ def put_mode_config(
         test_mode=bool(mode.get("test_mode", True)),
         min_confidence=float(detection.get("min_confidence", 0.75)),
     )
+
+
+@app.get("/api/config/drive", response_model=DriveConfigOut)
+def get_drive_config(state: dict[str, Any] = Depends(get_app_state)) -> DriveConfigOut:
+    drive = state["config"].get("drive", {})
+    return DriveConfigOut(
+        enabled=bool(drive.get("enabled", True)),
+        max_speed=float(drive.get("max_speed", 1.0)),
+        watchdog_timeout_ms=float(drive.get("watchdog_timeout_ms", 1000)),
+        invert_left=bool(drive.get("invert_left", False)),
+        invert_right=bool(drive.get("invert_right", False)),
+    )
+
+
+@app.put("/api/config/drive", response_model=DriveConfigOut)
+def put_drive_config(
+    body: DriveConfigIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> DriveConfigOut:
+    updates: dict[str, Any] = {"drive": {}}
+    drive = state["config"].setdefault("drive", {})
+    for field in ("enabled", "max_speed", "watchdog_timeout_ms", "invert_left", "invert_right"):
+        value = getattr(body, field)
+        if value is not None:
+            updates["drive"][field] = value
+            drive[field] = value
+    save_local_config(updates)
+    reload_config(state)
+    drive = state["config"].get("drive", {})
+    return DriveConfigOut(
+        enabled=bool(drive.get("enabled", True)),
+        max_speed=float(drive.get("max_speed", 1.0)),
+        watchdog_timeout_ms=float(drive.get("watchdog_timeout_ms", 1000)),
+        invert_left=bool(drive.get("invert_left", False)),
+        invert_right=bool(drive.get("invert_right", False)),
+    )
+
+
+@app.get("/api/drive/status", response_model=DriveStatusOut)
+def get_drive_status(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> DriveStatusOut:
+    return DriveStatusOut(**read_drive_status(state["paths"]))
+
+
+@app.post("/api/drive/command", response_model=DriveStatusOut)
+def post_drive_command(
+    body: DriveCommandIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> DriveStatusOut:
+    queue_drive_command(state["paths"], body.left, body.right)
+    return DriveStatusOut(**read_drive_status(state["paths"]))
+
+
+@app.post("/api/drive/stop", response_model=DriveStatusOut)
+def post_drive_stop(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> DriveStatusOut:
+    queue_drive_command(state["paths"], 0.0, 0.0)
+    return DriveStatusOut(**read_drive_status(state["paths"]))
 
 
 @app.get("/api/training/sessions", response_model=list[TrainingSessionOut])

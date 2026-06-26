@@ -12,6 +12,7 @@ COPY requirements.txt pyproject.toml README.md ./
 COPY maehbot ./maehbot
 COPY vision ./vision
 COPY spray ./spray
+COPY drive ./drive
 COPY storage ./storage
 COPY training ./training
 COPY core ./core

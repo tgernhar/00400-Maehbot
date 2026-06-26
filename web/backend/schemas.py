@@ -40,6 +40,36 @@ class SprayConfigOut(BaseModel):
     mower_speed_mm_s: float
 
 
+class DriveCommandIn(BaseModel):
+    left: float = Field(ge=-1.0, le=1.0)
+    right: float = Field(ge=-1.0, le=1.0)
+
+
+class DriveStatusOut(BaseModel):
+    left: float = 0.0
+    right: float = 0.0
+    enabled: bool = True
+    moving: bool = False
+    max_speed: float = 1.0
+    error: str | None = None
+
+
+class DriveConfigIn(BaseModel):
+    enabled: bool | None = None
+    max_speed: float | None = Field(default=None, ge=0.0, le=1.0)
+    watchdog_timeout_ms: float | None = Field(default=None, ge=100.0)
+    invert_left: bool | None = None
+    invert_right: bool | None = None
+
+
+class DriveConfigOut(BaseModel):
+    enabled: bool
+    max_speed: float
+    watchdog_timeout_ms: float
+    invert_left: bool
+    invert_right: bool
+
+
 class ModeConfigIn(BaseModel):
     test_mode: bool | None = None
     min_confidence: float | None = None
