@@ -185,9 +185,15 @@ export async function deleteTrainingSession(sessionId: number): Promise<void> {
   }
 }
 
-export async function fetchSessionAnnotations(sessionId: number): Promise<
-  { id: number; session_id: number; frame_index: number; class_id: string; bbox: BBox }[]
-> {
+export interface SessionAnnotation {
+  id: number;
+  session_id: number;
+  frame_index: number;
+  class_id: string;
+  bbox: BBox;
+}
+
+export async function fetchSessionAnnotations(sessionId: number): Promise<SessionAnnotation[]> {
   const r = await fetch(`${API}/training/sessions/${sessionId}/annotations`);
   if (!r.ok) throw new Error("Annotationen laden fehlgeschlagen");
   return r.json();
@@ -211,7 +217,7 @@ export async function saveAnnotation(
   frameIndex: number,
   classId: string,
   bbox: BBox
-): Promise<void> {
+): Promise<SessionAnnotation> {
   const r = await fetch(`${API}/training/annotations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -223,6 +229,7 @@ export async function saveAnnotation(
     }),
   });
   if (!r.ok) throw new Error("Annotation speichern fehlgeschlagen");
+  return r.json();
 }
 
 export interface YoloExportResult {

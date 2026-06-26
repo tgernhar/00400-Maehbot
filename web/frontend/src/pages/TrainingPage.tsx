@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   BBox,
   cameraPreviewUrl,
@@ -14,6 +15,7 @@ import {
   RecordingStatus,
   resumeRecording,
   saveAnnotation,
+  SessionAnnotation,
   startRecording,
   stopRecording,
   TrainingSession,
@@ -26,6 +28,40 @@ function recordingLabel(status: RecordingStatus | null): string {
   if (status.state === "recording") return `Aufnahme (${status.frame_count} Frames)`;
   if (status.state === "paused") return `Pausiert (${status.frame_count} Frames)`;
   return "Bereit";
+}
+
+const ANNOTATION_COLORS: Record<string, string> = {
+  grass: "#88cc88",
+  clover: "#00ff88",
+  dandelion: "#ffcc00",
+  unknown_weed: "#ff6644",
+};
+
+function classDisplayName(classes: PlantClass[], classId: string): string {
+  return classes.find((c) => c.id === classId)?.name ?? classId;
+}
+
+function drawAnnotationBox(
+  ctx: CanvasRenderingContext2D,
+  box: BBox,
+  color: string,
+  label?: string,
+  dashed = false,
+) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash(dashed ? [6, 4] : []);
+  ctx.strokeRect(box.x, box.y, box.width, box.height);
+  ctx.setLineDash([]);
+  if (label) {
+    const textY = Math.max(box.y - 6, 14);
+    ctx.font = "14px sans-serif";
+    const metrics = ctx.measureText(label);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+    ctx.fillRect(box.x, textY - 14, metrics.width + 8, 18);
+    ctx.fillStyle = color;
+    ctx.fillText(label, box.x + 4, textY);
+  }
 }
 
 export default function TrainingPage() {
@@ -45,8 +81,10 @@ export default function TrainingPage() {
   const imgRef = useRef<HTMLImageElement>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const [previewBox, setPreviewBox] = useState<BBox | null>(null);
-  const [annotationCount, setAnnotationCount] = useState(0);
+  const [annotations, setAnnotations] = useState<SessionAnnotation[]>([]);
   const [lastExportPath, setLastExportPath] = useState<string | null>(null);
+
+  const annotationCount = annotations.length;
 
   async function refreshSessions(selectId?: number) {
     const list = await fetchTrainingSessions();
@@ -84,17 +122,17 @@ export default function TrainingPage() {
 
   useEffect(() => {
     drawFrame();
-  }, [selectedSession, frameIndex]);
+  }, [selectedSession, frameIndex, previewBox, annotations, classes]);
 
   useEffect(() => {
     if (!selectedSession) {
-      setAnnotationCount(0);
+      setAnnotations([]);
       return;
     }
     fetchSessionAnnotations(selectedSession.id)
-      .then((rows) => setAnnotationCount(rows.length))
-      .catch(() => setAnnotationCount(0));
-  }, [selectedSession?.id, message]);
+      .then(setAnnotations)
+      .catch(() => setAnnotations([]));
+  }, [selectedSession?.id]);
 
   function drawFrame() {
     const canvas = canvasRef.current;
@@ -107,10 +145,24 @@ export default function TrainingPage() {
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
       ctx.drawImage(img, 0, 0);
+      for (const ann of annotations) {
+        if (ann.frame_index !== frameIndex) continue;
+        const color = ANNOTATION_COLORS[ann.class_id] ?? "#66aaff";
+        drawAnnotationBox(
+          ctx,
+          ann.bbox,
+          color,
+          classDisplayName(classes, ann.class_id),
+        );
+      }
       if (previewBox) {
-        ctx.strokeStyle = "#00ff88";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(previewBox.x, previewBox.y, previewBox.width, previewBox.height);
+        drawAnnotationBox(
+          ctx,
+          previewBox,
+          "#ffffff",
+          classDisplayName(classes, classId),
+          true,
+        );
       }
     }
   }
@@ -223,8 +275,8 @@ export default function TrainingPage() {
 
   async function saveBox(box: BBox) {
     if (!selectedSession) return;
-    await saveAnnotation(selectedSession.id, frameIndex, classId, box);
-    setAnnotationCount((c) => c + 1);
+    const saved = await saveAnnotation(selectedSession.id, frameIndex, classId, box);
+    setAnnotations((prev) => [...prev, saved]);
     setMessage("Annotation gespeichert");
     setPreviewBox(null);
     setTimeout(() => setMessage(null), 2000);
@@ -444,9 +496,13 @@ export default function TrainingPage() {
               }}
             />
             <p className="muted export-hint">
+              Gespeicherte Markierungen werden beim Frame-Wechsel farbig eingeblendet.
               YOLO-Export legt Trainingsdaten auf dem Pi ab (images/labels + classes.txt).
-              Danach Modell extern trainieren (z. B. Ultralytics YOLO) und auf die IMX500-Kamera
-              deployen — siehe <code>docs/model-deployment.md</code> im Projekt.
+              Anleitung Ultralytics-Training: <code>docs/ultralytics-training.md</code>.
+              Danach Modell extern trainieren und auf die IMX500-Kamera deployen — siehe{" "}
+              <code>docs/model-deployment.md</code>.
+              Live-Erkennung testen: Core laufen lassen, <Link to="/">Review</Link> öffnen
+              (Testmodus in Einstellungen empfohlen).
               {lastExportPath && (
                 <>
                   {" "}
