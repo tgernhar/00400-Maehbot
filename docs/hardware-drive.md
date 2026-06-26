@@ -45,6 +45,86 @@ Die physischen Pin-Nummern beziehen sich auf die 40-polige Pi-Stiftleiste.
 
 Die Spray-Pins (Düse 17, Pumpe 27, Tank 22/23) bleiben frei von diesen Belegungen.
 
+## Wiring-Diagramm
+
+```mermaid
+flowchart LR
+    subgraph BAT["Fahrakku (z. B. 6-12 V)"]
+        BATP["+"]
+        BATM["- (GND)"]
+    end
+
+    subgraph SD["Step-Down 5 V / >=5 A"]
+        SDIN["IN +"]
+        SDING["IN -"]
+        SDOUT["OUT 5 V"]
+        SDOUTG["OUT GND"]
+    end
+
+    subgraph PI["Raspberry Pi 5 (BCM-GPIO)"]
+        PI5V["5V (Pin 2/4 oder USB-C)"]
+        PIGND["GND (Pin 6/9/...)"]
+        PI3V3["3V3 (Pin 1)"]
+        G25["GPIO25 (Pin22)"]
+        G5["GPIO5 (Pin29)"]
+        G6["GPIO6 (Pin31)"]
+        G12["GPIO12 (Pin32)"]
+        G16["GPIO16 (Pin36)"]
+        G26["GPIO26 (Pin37)"]
+        G13["GPIO13 (Pin33)"]
+    end
+
+    subgraph TB["TB6612FNG"]
+        VM["VM (Motor +)"]
+        VCC["VCC (Logik 3V3)"]
+        TGND["GND"]
+        STBY["STBY"]
+        AIN1["AIN1"]
+        AIN2["AIN2"]
+        PWMA["PWMA"]
+        BIN1["BIN1"]
+        BIN2["BIN2"]
+        PWMB["PWMB"]
+        AO1["AO1"]
+        AO2["AO2"]
+        BO1["BO1"]
+        BO2["BO2"]
+    end
+
+    ML["Motor Kette LINKS"]
+    MR["Motor Kette RECHTS"]
+
+    %% Strom
+    BATP -->|"+"| SDIN
+    BATM -->|"GND"| SDING
+    BATP -->|"Motorspannung"| VM
+    SDOUT -->|"5 V"| PI5V
+    SDOUTG -->|"GND"| PIGND
+
+    %% Gemeinsame Masse
+    BATM -.->|"common GND"| TGND
+    PIGND -.->|"common GND"| TGND
+
+    %% Logik
+    PI3V3 -->|"3V3"| VCC
+    G25 -->|"Standby"| STBY
+    G5 -->|"Richtung L"| AIN1
+    G6 -->|"Richtung L"| AIN2
+    G12 -->|"PWM L"| PWMA
+    G16 -->|"Richtung R"| BIN1
+    G26 -->|"Richtung R"| BIN2
+    G13 -->|"PWM R"| PWMB
+
+    %% Motoren
+    AO1 --> ML
+    AO2 --> ML
+    BO1 --> MR
+    BO2 --> MR
+```
+
+> Durchgezogene Linien = Verdrahtung, gestrichelte Linien = gemeinsame Masse
+> (Pi GND, Treiber GND und Akku-Minus müssen verbunden sein).
+
 ## Logik (TB6612FNG-Wahrheitstabelle pro Kanal)
 
 | IN1 | IN2 | PWM | Verhalten |
