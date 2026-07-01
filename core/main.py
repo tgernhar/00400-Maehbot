@@ -146,6 +146,8 @@ class CoreApplication:
             max_speed=float(drive_cfg.get("max_speed", 1.0)),
             watchdog_timeout_s=float(drive_cfg.get("watchdog_timeout_ms", 1000)) / 1000.0,
             enabled=bool(drive_cfg.get("enabled", True)),
+            invert_left=bool(drive_cfg.get("invert_left", False)),
+            invert_right=bool(drive_cfg.get("invert_right", False)),
         )
         self.health.set_test_mode(bool(self.config.get("mode", {}).get("test_mode", True)))
         self._preview_interval_s = self._preview_interval_from_config()

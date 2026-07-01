@@ -77,10 +77,21 @@ class DriveController:
             self.driver.stop()
             self.driver.disable()
 
-    def update_config(self, max_speed: float, watchdog_timeout_s: float, enabled: bool) -> None:
+    def update_config(
+        self,
+        max_speed: float,
+        watchdog_timeout_s: float,
+        enabled: bool,
+        invert_left: bool | None = None,
+        invert_right: bool | None = None,
+    ) -> None:
         with self._lock:
             self.max_speed = _clamp(max_speed, 0.0, 1.0)
             self.watchdog_timeout_s = max(0.1, watchdog_timeout_s)
+            if invert_left is not None:
+                self.driver.invert_left = invert_left
+            if invert_right is not None:
+                self.driver.invert_right = invert_right
         if enabled != self.enabled:
             self.set_enabled(enabled)
 
