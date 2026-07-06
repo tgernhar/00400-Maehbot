@@ -24,6 +24,8 @@ export interface Status {
   tank_full: boolean;
   auth_enabled: boolean;
   latency: Record<string, number>;
+  role: "all" | "drive" | "vision";
+  vision_connected: boolean;
 }
 
 export interface SprayConfig {

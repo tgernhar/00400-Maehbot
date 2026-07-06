@@ -1,8 +1,34 @@
 # Copy to config/local.yaml and adjust for your Raspberry Pi (not in git)
 
-# Example overrides:
+# --- Example: drive node (e.g. Pi 1 B+ with CSI camera, motors only) ---
+# node:
+#   role: drive
+#   peers:
+#     vision_url: ""            # later: http://maehbot-vision.local:8080
+# camera:
+#   source: picamera2
+#   width: 320                  # keep low on weak hardware
+#   height: 240
+#   fps: 5
+#   preview_fps: 2
+# drive:
+#   max_speed: 0.6
+
+# --- Example: vision node (Pi 5 + IMX500 + spray) ---
+# node:
+#   role: vision
+
+# --- Other common overrides ---
 # storage:
 #   root_path: ./data/maehbot   # for local dev on Windows
 # gpio:
 #   nozzle_valve: 17
 #   pump: 27
+# motor:
+#   left_in1: 5
+#   left_in2: 6
+#   left_pwm: 12
+#   right_in1: 16
+#   right_in2: 26
+#   right_pwm: 13
+#   standby: 25

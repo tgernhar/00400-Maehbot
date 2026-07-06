@@ -58,10 +58,12 @@ class MockCamera(Camera):
 
 
 class Picamera2Camera(Camera):
-    """IMX500 via picamera2 on Raspberry Pi."""
+    """CSI camera (IMX500, OV5647, ...) via picamera2/libcamera on Raspberry Pi."""
 
-    def __init__(self, fps: int = 30) -> None:
+    def __init__(self, fps: int = 30, width: int = 640, height: int = 480) -> None:
         self.fps = fps
+        self.width = width
+        self.height = height
         self._picam = None
 
     def start(self) -> None:
@@ -69,11 +71,11 @@ class Picamera2Camera(Camera):
 
         self._picam = Picamera2()
         config = self._picam.create_preview_configuration(
-            main={"size": (640, 480), "format": "RGB888"}
+            main={"size": (self.width, self.height), "format": "RGB888"}
         )
         self._picam.configure(config)
         self._picam.start()
-        logger.info("Picamera2 started")
+        logger.info("Picamera2 started (%dx%d)", self.width, self.height)
 
     def read(self) -> Frame | None:
         if not self._picam:
@@ -96,6 +98,48 @@ class Picamera2Camera(Camera):
             self._picam = None
 
 
+class UsbCamera(Camera):
+    """USB webcam via OpenCV V4L2 (fallback for nodes without CSI camera)."""
+
+    def __init__(self, device: int = 0, fps: int = 30, width: int = 640, height: int = 480) -> None:
+        self.device = device
+        self.fps = fps
+        self.width = width
+        self.height = height
+        self._cap = None
+
+    def start(self) -> None:
+        import cv2
+
+        self._cap = cv2.VideoCapture(self.device)
+        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+        self._cap.set(cv2.CAP_PROP_FPS, self.fps)
+        if not self._cap.isOpened():
+            raise RuntimeError(f"USB-Kamera {self.device} konnte nicht geöffnet werden")
+        logger.info("USB camera %d started (%dx%d)", self.device, self.width, self.height)
+
+    def read(self) -> Frame | None:
+        if not self._cap:
+            return None
+        import cv2
+
+        ok, bgr = self._cap.read()
+        if not ok:
+            return None
+        ts = time.monotonic() * 1000.0
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(rgb)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return Frame(data=buf.getvalue(), width=img.width, height=img.height, timestamp_ms=ts)
+
+    def stop(self) -> None:
+        if self._cap:
+            self._cap.release()
+            self._cap = None
+
+
 def _picamera2_available() -> bool:
     try:
         from picamera2 import Picamera2  # noqa: F401
@@ -106,16 +150,26 @@ def _picamera2_available() -> bool:
 
 
 def create_camera(config: dict, force_mock: bool = False) -> Camera:
-    fps = int(config.get("camera", {}).get("fps", 30))
-    inference = config.get("detection", {}).get("inference_target", "imx500")
-    if force_mock or sys.platform != "linux":
-        return MockCamera(fps=fps)
-    if inference == "imx500" or inference == "pi_cpu":
-        if _picamera2_available():
-            return Picamera2Camera(fps=fps)
-        logger.warning("Picamera2 unavailable, using MockCamera")
-        return MockCamera(fps=fps)
-    return MockCamera(fps=fps)
+    cam_cfg = config.get("camera", {})
+    fps = int(cam_cfg.get("fps", 30))
+    width = int(cam_cfg.get("width", 640))
+    height = int(cam_cfg.get("height", 480))
+    source = str(cam_cfg.get("source", "auto")).lower()
+    if force_mock or sys.platform != "linux" or source == "mock":
+        return MockCamera(fps=fps, width=width, height=height)
+    if source == "usb":
+        return UsbCamera(
+            device=int(cam_cfg.get("usb_device", 0)),
+            fps=fps,
+            width=width,
+            height=height,
+        )
+    # source: picamera2 or auto
+    if _picamera2_available():
+        return Picamera2Camera(fps=fps, width=width, height=height)
+    if source == "picamera2":
+        logger.warning("Picamera2 nicht verfügbar, nutze MockCamera")
+    return MockCamera(fps=fps, width=width, height=height)
 
 
 class VideoFileCamera(Camera):

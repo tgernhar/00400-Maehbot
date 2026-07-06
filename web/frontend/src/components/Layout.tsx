@@ -3,11 +3,24 @@ import { Status } from "../api";
 
 export function StatusBanner({ status }: { status: Status | null }) {
   if (!status) return null;
+  // Spray/tank/test-mode state only exists when a vision node is present
+  const visionState = status.role !== "drive" || status.vision_connected;
   return (
     <div className="status-banner">
-      {status.test_mode && <span className="badge warn">Testmodus – kein Sprühen</span>}
+      {status.role === "drive" && (
+        <span className="badge info">Fahr-Knoten</span>
+      )}
+      {status.role === "vision" && (
+        <span className="badge info">Vision-Knoten</span>
+      )}
+      {status.role === "drive" && !status.vision_connected && (
+        <span className="badge warn">Vision-Knoten nicht verbunden</span>
+      )}
+      {visionState && status.test_mode && (
+        <span className="badge warn">Testmodus – kein Sprühen</span>
+      )}
       {!status.auth_enabled && <span className="badge info">Auth deaktiviert</span>}
-      {status.tank_empty && <span className="badge error">Tank leer</span>}
+      {visionState && status.tank_empty && <span className="badge error">Tank leer</span>}
       {status.camera_healthy ? (
         <span className="badge ok">Kamera OK</span>
       ) : (

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from maehbot.config_loader import get_config_dir, load_config
+from maehbot.node import NodeConfig
 from maehbot.types import Detection, Frame, SprayEvent, SystemStatus
 from core.health import HealthMonitor
 from drive.command import consume_drive_command, write_drive_status
@@ -46,12 +47,14 @@ class CoreApplication:
     def __init__(self, force_mock: bool = False) -> None:
         self.force_mock = force_mock
         self.config = load_config()
+        self.node = NodeConfig(self.config)
         self._apply_storage_root_for_dev()
         self._init_storage()
         self._init_gpio()
         self._init_spray()
         self._init_drive()
-        self.health = HealthMonitor(pins=self.pins)
+        # Tank sensors belong to the spray hardware (vision node only)
+        self.health = HealthMonitor(pins=self.pins if self.node.runs_vision else None)
         self.health.set_test_mode(bool(self.config.get("mode", {}).get("test_mode", True)))
         self._config_mtime = self._local_config_mtime()
         self._last_status_write = 0.0
@@ -59,9 +62,12 @@ class CoreApplication:
         self._preview_interval_s = self._preview_interval_from_config()
         self._last_recording_status_write = 0.0
         self.pipeline: VisionPipeline | None = None
-        fps = int(self.config.get("camera", {}).get("fps", 30))
-        self.recorder = LearningDriveRecorder(self.paths, self.db, fps=fps)
-        self.recorder.publish_status()
+        self._preview_camera: Any = None
+        self.recorder: LearningDriveRecorder | None = None
+        if self.node.runs_vision:
+            fps = int(self.config.get("camera", {}).get("fps", 30))
+            self.recorder = LearningDriveRecorder(self.paths, self.db, fps=fps)
+            self.recorder.publish_status()
         self._last_frame: Frame | None = None
 
     def _apply_storage_root_for_dev(self) -> None:
@@ -157,7 +163,8 @@ class CoreApplication:
         t_schedule_start = time.monotonic()
         self._last_frame = frame
         self.health.record_frame(frame.timestamp_ms)
-        self.recorder.write_frame(frame)
+        if self.recorder:
+            self.recorder.write_frame(frame)
         status = self.health.build_status()
 
         for det in detections:
@@ -193,7 +200,7 @@ class CoreApplication:
             self._last_status_write = now
 
     def _maybe_publish_recording_status(self) -> None:
-        if self.recorder.state.value == "idle":
+        if not self.recorder or self.recorder.state.value == "idle":
             return
         now = time.monotonic()
         if now - self._last_recording_status_write > 1.0:
@@ -201,6 +208,8 @@ class CoreApplication:
             self._last_recording_status_write = now
 
     def _poll_recording(self) -> None:
+        if not self.recorder:
+            return
         command = consume_recording_command(self.paths)
         if not command:
             return
@@ -297,34 +306,83 @@ class CoreApplication:
             data["latency"] = self.pipeline.latency.summary()
         self.writer.write_status(data)
 
+    def _preview_tick(self) -> None:
+        """Drive-only nodes: read camera at preview rate, no detection."""
+        if not self._preview_camera:
+            return
+        now = time.monotonic()
+        if now - self._last_preview_write < self._preview_interval_s:
+            return
+        frame = self._preview_camera.read()
+        if not frame or not frame.data:
+            return
+        self._last_frame = frame
+        self.health.record_frame(frame.timestamp_ms)
+        try:
+            self.paths.preview_path.write_bytes(frame.data)
+        except OSError:
+            logger.warning("Failed to write camera preview")
+        self._last_preview_write = now
+
     def run(self) -> None:
-        self.spray_controller.start()
-        self.drive_controller.start()
-        write_drive_status(self.paths, self.drive_controller.status_dict())
-        camera = create_camera(self.config, force_mock=self.force_mock)
-        detector = create_detector(self.config, force_mock=self.force_mock)
-        self.pipeline = VisionPipeline(camera, detector, self._on_detections)
-        self.pipeline.start()
+        if self.node.runs_drive:
+            self.drive_controller.start()
+            write_drive_status(self.paths, self.drive_controller.status_dict())
+
+        self._preview_camera = None
+        if self.node.runs_vision:
+            self.spray_controller.start()
+            camera = create_camera(self.config, force_mock=self.force_mock)
+            detector = create_detector(self.config, force_mock=self.force_mock)
+            self.pipeline = VisionPipeline(camera, detector, self._on_detections)
+            self.pipeline.start()
+        else:
+            camera = create_camera(self.config, force_mock=self.force_mock)
+            try:
+                camera.start()
+                self._preview_camera = camera
+            except Exception:
+                logger.exception("Kamera-Start fehlgeschlagen — Vorschau deaktiviert")
 
         fps = int(self.config.get("camera", {}).get("fps", 30))
-        logger.info("Core started (test_mode=%s, force_mock=%s)", self.health.test_mode, self.force_mock)
+        logger.info(
+            "Core started (role=%s, test_mode=%s, force_mock=%s)",
+            self.node.role,
+            self.health.test_mode,
+            self.force_mock,
+        )
 
         while True:
             self.reload_config_if_changed()
             self._poll_recording()
-            self._poll_drive()
-            if not self.pipeline.process_one():
-                time.sleep(0.01)
+            if self.node.runs_drive:
+                self._poll_drive()
+            if self.pipeline:
+                if not self.pipeline.process_one():
+                    time.sleep(0.01)
+                else:
+                    interval = 1.0 / max(fps, 1)
+                    time.sleep(max(0.0, interval - 0.001))
             else:
-                interval = 1.0 / max(fps, 1)
-                time.sleep(max(0.0, interval - 0.001))
+                self._preview_tick()
+                now = time.monotonic()
+                if now - self._last_status_write > 2.0:
+                    self._write_status(self.health.build_status())
+                    self._last_status_write = now
+                # Fast cadence so drive commands are consumed promptly
+                time.sleep(0.02)
 
     def shutdown(self) -> None:
         if self.pipeline:
             self.pipeline.stop()
-        self.recorder.shutdown()
-        self.spray_controller.stop()
-        self.drive_controller.stop()
+        if self._preview_camera:
+            self._preview_camera.stop()
+        if self.recorder:
+            self.recorder.shutdown()
+        if self.node.runs_vision:
+            self.spray_controller.stop()
+        if self.node.runs_drive:
+            self.drive_controller.stop()
         self.writer.stop()
         self.gpio_backend.close()
 

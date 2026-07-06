@@ -87,6 +87,8 @@ class StatusOut(BaseModel):
     tank_full: bool
     auth_enabled: bool
     latency: dict[str, float] = Field(default_factory=dict)
+    role: str = "all"
+    vision_connected: bool = True
 
 
 class TrainingSessionOut(BaseModel):

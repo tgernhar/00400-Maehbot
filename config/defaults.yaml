@@ -1,6 +1,17 @@
 # Maehbot default configuration
 # Override per machine in config/local.yaml (gitignored)
 
+# --- Node role (multi-device split) ---
+# Roles are pure config so hardware can be swapped for newer Pis without
+# code changes. Set per device in config/local.yaml:
+#   all    = everything on one device (default)
+#   drive  = motors + camera preview only (teleoperation node)
+#   vision = detection + spray + training only (weed-control node)
+node:
+  role: all
+  peers:
+    vision_url: ""   # e.g. http://maehbot-vision.local:8080 (used by drive node's web UI)
+
 # --- Spray & motion ---
 spray:
   delay_ms: 0              # user delay added before travel time
@@ -18,9 +29,12 @@ drive:
 
 # --- Camera ---
 camera:
+  source: auto     # auto | picamera2 | usb | mock (auto = picamera2 if available)
   fps: 30
   preview_fps: 5   # live preview refresh rate (single preview.jpg on disk)
-  # resolution set when IMX500 pipeline is configured
+  width: 640
+  height: 480
+  usb_device: 0    # V4L2 index when source: usb
 
 # --- Detection ---
 detection:

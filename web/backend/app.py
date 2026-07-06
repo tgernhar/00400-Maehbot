@@ -9,14 +9,16 @@ import time
 from pathlib import Path
 from typing import Any
 
+import httpx
 import uvicorn
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from drive.command import queue_drive_command, read_drive_status
 from maehbot.config_loader import get_project_root, load_config, save_local_config
+from maehbot.node import NodeConfig
 from storage.database import Database
 from storage.paths import StoragePaths
 from training.annotations import list_session_annotations, save_annotation
@@ -78,6 +80,14 @@ def _resolve_storage_root(config: dict[str, Any]) -> str:
     return root
 
 
+def _load_node(config: dict[str, Any]) -> NodeConfig:
+    try:
+        return NodeConfig(config)
+    except ValueError as exc:
+        logger.warning("%s — nutze Rolle 'all'", exc)
+        return NodeConfig({})
+
+
 def get_app_state() -> dict[str, Any]:
     if not _state:
         config = load_config()
@@ -87,6 +97,7 @@ def get_app_state() -> dict[str, Any]:
         _state["config"] = config
         _state["paths"] = paths
         _state["db"] = Database(paths.db_path)
+        _state["node"] = _load_node(config)
         _state["password_hash"] = hash_password(DEFAULT_PASSWORD)
     return _state
 
@@ -105,7 +116,54 @@ def reload_config(state: dict[str, Any]) -> dict[str, Any]:
     state["paths"] = StoragePaths(root)
     state["paths"].ensure()
     state["db"] = Database(state["paths"].db_path)
+    state["node"] = _load_node(config)
     return config
+
+
+# Endpoints owned by the vision node. On a drive-only node with a configured
+# vision peer these are transparently forwarded, so the browser only ever
+# talks to one web UI. Camera preview and drive endpoints stay local.
+_VISION_PROXY_PREFIXES = (
+    "/api/detections",
+    "/api/classes",
+    "/api/training",
+    "/api/config/spray",
+    "/api/config/mode",
+)
+
+
+@app.middleware("http")
+async def vision_peer_proxy(request: Request, call_next: Any) -> Any:
+    node: NodeConfig = get_app_state()["node"]
+    path = request.url.path
+    if node and node.has_vision_peer and path.startswith(_VISION_PROXY_PREFIXES):
+        url = f"{node.vision_url}{path}"
+        headers = {
+            k: v
+            for k, v in request.headers.items()
+            if k.lower() not in ("host", "content-length")
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                upstream = await client.request(
+                    request.method,
+                    url,
+                    params=request.query_params,
+                    headers=headers,
+                    content=await request.body(),
+                )
+            return Response(
+                content=upstream.content,
+                status_code=upstream.status_code,
+                media_type=upstream.headers.get("content-type"),
+            )
+        except httpx.HTTPError:
+            logger.warning("Vision-Knoten nicht erreichbar: %s", url)
+            return JSONResponse(
+                status_code=502,
+                content={"detail": "Vision-Knoten nicht erreichbar"},
+            )
+    return await call_next(request)
 
 
 @app.get("/api/health")
@@ -129,10 +187,27 @@ def get_status(
     _user: str | None = Depends(auth_dependency),
 ) -> StatusOut:
     config = reload_config(state)
+    node: NodeConfig = state["node"]
     status_path = state["paths"].status_path
     data: dict[str, Any] = {}
     if status_path.exists():
         data = json.loads(status_path.read_text(encoding="utf-8"))
+
+    vision_connected = node.runs_vision
+    if node.has_vision_peer:
+        # Merge spray/tank/test-mode state from the vision node into one status
+        try:
+            r = httpx.get(f"{node.vision_url}/api/status", timeout=2.0)
+            if r.status_code == 200:
+                peer = r.json()
+                data["test_mode"] = peer.get("test_mode", data.get("test_mode"))
+                data["tank_empty"] = peer.get("tank_empty", False)
+                data["tank_full"] = peer.get("tank_full", False)
+                data.setdefault("latency", peer.get("latency", {}))
+                vision_connected = True
+        except httpx.HTTPError:
+            vision_connected = False
+
     return StatusOut(
         test_mode=bool(data.get("test_mode", config.get("mode", {}).get("test_mode", True))),
         camera_healthy=bool(data.get("camera_healthy", False)),
@@ -140,6 +215,8 @@ def get_status(
         tank_full=bool(data.get("tank_full", False)),
         auth_enabled=bool(config.get("web", {}).get("auth_enabled", False)),
         latency=data.get("latency", {}),
+        role=node.role,
+        vision_connected=vision_connected,
     )
 
 
