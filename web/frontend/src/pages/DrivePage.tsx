@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  cameraPreviewUrl,
   DriveConfig,
   DriveStatus,
   fetchDriveConfig,
@@ -10,6 +11,7 @@ import {
 } from "../api";
 
 const KEEPALIVE_MS = 300;
+const PREVIEW_REFRESH_MS = 500;
 
 type Vec = { left: number; right: number };
 
@@ -19,6 +21,8 @@ export default function DrivePage() {
   const [speed, setSpeed] = useState(0.6);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [previewTick, setPreviewTick] = useState(Date.now());
+  const [previewAvailable, setPreviewAvailable] = useState(true);
 
   const keepalive = useRef<number | null>(null);
   const current = useRef<Vec>({ left: 0, right: 0 });
@@ -27,7 +31,11 @@ export default function DrivePage() {
     fetchDriveConfig().then(setConfig).catch(() => undefined);
     fetchDriveStatus().then(setStatus).catch(() => undefined);
     const t = setInterval(() => fetchDriveStatus().then(setStatus).catch(() => undefined), 1000);
-    return () => clearInterval(t);
+    const p = setInterval(() => setPreviewTick(Date.now()), PREVIEW_REFRESH_MS);
+    return () => {
+      clearInterval(t);
+      clearInterval(p);
+    };
   }, []);
 
   const clearKeepalive = useCallback(() => {
@@ -144,30 +152,51 @@ export default function DrivePage() {
         </span>
       </div>
 
-      <label className="drive-speed">
-        Geschwindigkeit: {(speed * 100).toFixed(0)} %
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={speed}
-          onChange={(e) => setSpeed(Number(e.target.value))}
-        />
-      </label>
+      <div className="drive-layout">
+        <div className="drive-controls">
+          <label className="drive-speed">
+            Geschwindigkeit: {(speed * 100).toFixed(0)} %
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={speed}
+              onChange={(e) => setSpeed(Number(e.target.value))}
+            />
+          </label>
 
-      <div className="drive-pad">
-        <div />
-        {padBtn("▲", { left: 1, right: 1 })}
-        <div />
-        {padBtn("◀", { left: -1, right: 1 })}
-        <button type="button" className="drive-btn stop" onClick={release}>
-          ■
-        </button>
-        {padBtn("▶", { left: 1, right: -1 })}
-        <div />
-        {padBtn("▼", { left: -1, right: -1 })}
-        <div />
+          <div className="drive-pad">
+            <div />
+            {padBtn("▲", { left: 1, right: 1 })}
+            <div />
+            {padBtn("◀", { left: -1, right: 1 })}
+            <button type="button" className="drive-btn stop" onClick={release}>
+              ■
+            </button>
+            {padBtn("▶", { left: 1, right: -1 })}
+            <div />
+            {padBtn("▼", { left: -1, right: -1 })}
+            <div />
+          </div>
+        </div>
+
+        <div className="drive-preview">
+          <h2>Kamerabild</h2>
+          <img
+            src={cameraPreviewUrl(previewTick)}
+            alt="Kameravorschau"
+            className="camera-preview"
+            style={{ display: previewAvailable ? "block" : "none" }}
+            onError={() => setPreviewAvailable(false)}
+            onLoad={() => setPreviewAvailable(true)}
+          />
+          {!previewAvailable && (
+            <div className="drive-preview-placeholder">
+              <p className="muted">Kameravorschau noch nicht verfügbar.</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {config && (

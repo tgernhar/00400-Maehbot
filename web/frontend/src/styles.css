@@ -284,6 +284,42 @@ button {
   margin: 1rem 0;
 }
 
+.drive-layout {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.5rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 800px) {
+  .drive-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.drive-preview h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.drive-preview .camera-preview {
+  max-height: 420px;
+  width: 100%;
+  object-fit: contain;
+  background: #0a0e12;
+}
+
+.drive-preview-placeholder {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0e12;
+  border: 1px dashed #333;
+  border-radius: 6px;
+}
+
 .drive-speed {
   display: flex;
   flex-direction: column;
