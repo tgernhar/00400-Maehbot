@@ -17,6 +17,7 @@ import {
   updateCoverageConfig,
   updateDriveConfig,
 } from "../api";
+import DriveJoystick from "../components/DriveJoystick";
 
 const KEEPALIVE_MS = 300;
 const PREVIEW_REFRESH_MS = 66; // ~15 fps, passend zu camera.preview_fps
@@ -38,11 +39,11 @@ const BACKWARD: Vec = { left: -1, right: -1 };
 const TURN_LEFT: Vec = { left: -1, right: 1 };
 const TURN_RIGHT: Vec = { left: 1, right: -1 };
 
-/** Pfeiltasten gedreht (Kamera/Fahrtrichtung): links←unten, unten←rechts, rechts←oben, oben←links */
+/** Vorwärts/Rückwärts auf linke/rechte Pfeiltaste (getauscht): links=vorwärts, rechts=rückwärts */
 const ARROW_KEY_MAP: Record<string, Vec> = {
-  ArrowLeft: BACKWARD,
+  ArrowLeft: FORWARD,
   ArrowDown: TURN_RIGHT,
-  ArrowRight: FORWARD,
+  ArrowRight: BACKWARD,
   ArrowUp: TURN_LEFT,
 };
 
@@ -63,6 +64,20 @@ function useSmoothPreview(urlFactory: (t: number) => string, refreshMs: number):
   return src;
 }
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(query).matches : false
+  );
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const handler = () => setMatches(m.matches);
+    handler();
+    m.addEventListener("change", handler);
+    return () => m.removeEventListener("change", handler);
+  }, [query]);
+  return matches;
+}
+
 export default function DrivePage() {
   const [config, setConfig] = useState<DriveConfig | null>(null);
   const [status, setStatus] = useState<DriveStatus | null>(null);
@@ -78,6 +93,9 @@ export default function DrivePage() {
   const [coverageConfig, setCoverageConfig] = useState<CoverageConfig | null>(null);
   const [areaLength, setAreaLength] = useState(1.0);
   const [areaWidth, setAreaWidth] = useState(1.0);
+
+  const isTouch = useMediaQuery("(pointer: coarse)");
+  const isPortrait = useMediaQuery("(orientation: portrait)");
 
   const keepalive = useRef<number | null>(null);
   const current = useRef<Vec>({ left: 0, right: 0 });
@@ -107,20 +125,35 @@ export default function DrivePage() {
     stopDrive().then(setStatus).catch((e) => setError(e.message));
   }, [clearKeepalive]);
 
+  const startKeepalive = useCallback(() => {
+    const fire = () =>
+      sendDriveCommand(current.current.left, current.current.right)
+        .then(setStatus)
+        .catch((e) => setError(e.message));
+    fire();
+    clearKeepalive();
+    keepalive.current = window.setInterval(fire, KEEPALIVE_MS);
+  }, [clearKeepalive]);
+
   const press = useCallback(
     (vec: Vec) => {
       setError(null);
       current.current = vec;
-      const fire = () =>
-        sendDriveCommand(current.current.left, current.current.right)
-          .then(setStatus)
-          .catch((e) => setError(e.message));
-      fire();
-      clearKeepalive();
-      keepalive.current = window.setInterval(fire, KEEPALIVE_MS);
+      startKeepalive();
     },
-    [clearKeepalive]
+    [startKeepalive]
   );
+
+  // Joystick: continuous updates while held (direction + magnitude = speed)
+  const joyStart = useCallback(() => {
+    setError(null);
+    current.current = { left: 0, right: 0 };
+    startKeepalive();
+  }, [startKeepalive]);
+
+  const joyChange = useCallback((left: number, right: number) => {
+    current.current = { left, right };
+  }, []);
 
   useEffect(() => () => clearKeepalive(), [clearKeepalive]);
 
@@ -263,36 +296,54 @@ export default function DrivePage() {
         </span>
       </div>
 
-      <div className="drive-layout">
-        <div className="drive-controls">
-          <label className="drive-speed">
-            Geschwindigkeit: {(speed * 100).toFixed(0)} %
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
+      <div className={`drive-layout ${isTouch ? "touch" : ""}`}>
+        {isTouch ? (
+          <div className="drive-controls joystick-controls">
+            <DriveJoystick
+              onStart={joyStart}
+              onChange={joyChange}
+              onEnd={release}
+              disabled={config ? !config.enabled : false}
             />
-          </label>
-
-          <div className="drive-pad">
-            <div />
-            {padBtn("▲", TURN_LEFT)}
-            <div />
-            {padBtn("◀", BACKWARD)}
-            <button type="button" className="drive-btn stop" onClick={release}>
-              ■
-            </button>
-            {padBtn("▶", FORWARD)}
-            <div />
-            {padBtn("▼", TURN_RIGHT)}
-            <div />
+            <p className="muted joystick-hint">
+              Finger ziehen: Richtung bestimmt die Fahrtrichtung, der Abstand zur Mitte das Tempo.
+              Loslassen stoppt.
+            </p>
+            {isPortrait && (
+              <p className="warn">Für die Steuerung bitte das Gerät ins Querformat drehen.</p>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="drive-controls">
+            <label className="drive-speed">
+              Geschwindigkeit: {(speed * 100).toFixed(0)} %
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={speed}
+                onChange={(e) => setSpeed(Number(e.target.value))}
+              />
+            </label>
 
-        <div className="drive-preview">
+            <div className="drive-pad">
+              <div />
+              {padBtn("▲", TURN_LEFT)}
+              <div />
+              {padBtn("◀", FORWARD)}
+              <button type="button" className="drive-btn stop" onClick={release}>
+                ■
+              </button>
+              {padBtn("▶", BACKWARD)}
+              <div />
+              {padBtn("▼", TURN_RIGHT)}
+              <div />
+            </div>
+          </div>
+        )}
+
+        <div className="drive-preview camera-panel">
           <h2>Kamerabild</h2>
           <img
             src={previewSrc}
@@ -307,7 +358,9 @@ export default function DrivePage() {
               <p className="muted">Kameravorschau noch nicht verfügbar.</p>
             </div>
           )}
+        </div>
 
+        <div className="drive-preview lidar-panel">
           <h2>LiDAR</h2>
           <img
             src={lidarSrc}

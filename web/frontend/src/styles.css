@@ -285,17 +285,11 @@ button {
 }
 
 .drive-layout {
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 1.5rem;
-  align-items: start;
+  align-items: flex-start;
   margin-bottom: 1rem;
-}
-
-@media (max-width: 800px) {
-  .drive-layout {
-    grid-template-columns: 1fr;
-  }
 }
 
 .drive-preview h2 {
@@ -303,15 +297,22 @@ button {
   font-size: 1.1rem;
 }
 
-.drive-preview .camera-preview {
-  max-height: 420px;
-  width: 100%;
-  object-fit: contain;
+/* Frame fits the actual image size (no stretching / letterboxing) */
+.drive-preview .camera-preview,
+.drive-preview .lidar-preview {
+  display: block;
+  max-width: 100%;
+  height: auto;
   background: #0a0e12;
+}
+
+.camera-panel {
+  max-width: 640px;
 }
 
 .drive-preview-placeholder {
   min-height: 240px;
+  min-width: 240px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -362,6 +363,90 @@ button {
   border-radius: 8px;
   background: #141a22;
   max-width: 420px;
+}
+
+/* Touch joystick (mobile / coarse pointer) */
+.joystick-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.joystick {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #1e2833 0%, #10151c 72%);
+  border: 2px solid #2a4a6a;
+  touch-action: none;
+  user-select: none;
+  flex: none;
+}
+
+.joystick.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.joystick-ring {
+  position: absolute;
+  inset: 22%;
+  border: 1px dashed #33465c;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 -36px;
+  border-radius: 50%;
+  background: #2a4a6a;
+  border: 2px solid #7eb8ff;
+  pointer-events: none;
+  transition: transform 0.03s linear;
+}
+
+.joystick-hint {
+  max-width: 240px;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+/* Landscape-optimised mobile layout: joystick and camera side by side */
+@media (pointer: coarse) and (orientation: landscape) {
+  .drive-layout.touch {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .drive-layout.touch .joystick-controls {
+    order: 2;
+    margin-left: auto;
+  }
+  .drive-layout.touch .camera-panel {
+    order: 1;
+  }
+  .drive-layout.touch .lidar-panel {
+    order: 3;
+  }
+  .joystick {
+    width: 42vh;
+    height: 42vh;
+    max-width: 300px;
+    max-height: 300px;
+  }
+  .joystick-knob {
+    width: 30%;
+    height: 30%;
+    margin: 0;
+    top: 35%;
+    left: 35%;
+  }
 }
 
 .lidar-preview {
