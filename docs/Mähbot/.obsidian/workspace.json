@@ -41,12 +41,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "multi-node.md",
+                "file": "Server Update.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "multi-node"
+              "title": "Server Update"
             }
           }
         ],
@@ -214,8 +214,8 @@
   },
   "active": "9b9bd3720e83ad77",
   "lastOpenFiles": [
-    "Server Update.md",
     "multi-node.md",
+    "Server Update.md",
     "Rules.md",
     "Verdrahtung.md"
   ]

@@ -70,6 +70,54 @@ class DriveConfigOut(BaseModel):
     invert_right: bool
 
 
+class CoverageStartIn(BaseModel):
+    length_m: float = Field(default=1.0, gt=0.0, le=100.0)
+    width_m: float = Field(default=1.0, gt=0.0, le=100.0)
+
+
+class CoverageStatusOut(BaseModel):
+    state: str = "idle"
+    length_m: float = 0.0
+    width_m: float = 0.0
+    leg_index: int = 0
+    leg_count: int = 0
+    progress_percent: float = 0.0
+    lidar_connected: bool = False
+    error: str | None = None
+
+
+class CoverageConfigIn(BaseModel):
+    drive_speed: float | None = Field(default=None, ge=0.0, le=1.0)
+    turn_speed: float | None = Field(default=None, ge=0.0, le=1.0)
+    speed_m_s: float | None = Field(default=None, gt=0.0)
+    pivot_deg_s: float | None = Field(default=None, gt=0.0)
+    first_leg_m: float | None = Field(default=None, gt=0.0)
+    second_leg_m: float | None = Field(default=None, gt=0.0)
+    track_spacing_m: float | None = Field(default=None, gt=0.0)
+    turn_direction: str | None = Field(default=None, pattern="^(left|right)$")
+    obstacle_stop_m: float | None = Field(default=None, ge=0.0)
+    obstacle_sector_deg: float | None = Field(default=None, ge=0.0, le=360.0)
+    obstacle_wait_s: float | None = Field(default=None, ge=0.0)
+    detour_m: float | None = Field(default=None, gt=0.0)
+    max_avoid_attempts: int | None = Field(default=None, ge=0)
+
+
+class CoverageConfigOut(BaseModel):
+    drive_speed: float
+    turn_speed: float
+    speed_m_s: float
+    pivot_deg_s: float
+    first_leg_m: float
+    second_leg_m: float
+    track_spacing_m: float
+    turn_direction: str
+    obstacle_stop_m: float
+    obstacle_sector_deg: float
+    obstacle_wait_s: float
+    detour_m: float
+    max_avoid_attempts: int
+
+
 class ModeConfigIn(BaseModel):
     test_mode: bool | None = None
     min_confidence: float | None = None

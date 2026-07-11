@@ -27,11 +27,38 @@ drive:
   invert_left: false       # flip direction if a track runs backwards
   invert_right: false
 
+# --- LiDAR (LDRobot D500 via USB adapter) ---
+lidar:
+  enabled: true
+  port: /dev/ttyUSB0
+  baud: 230400
+  angle_offset_deg: 0    # rotate scan if sensor is not mounted front-aligned
+  preview_fps: 2         # lidar.jpg refresh rate for the web UI
+  preview_range_m: 4.0   # display radius of the preview image
+
+# --- Area coverage (outward rectangular spiral, "Bereich abfahren") ---
+# Time-based dead reckoning until wheel encoders exist: speed_m_s and
+# pivot_deg_s are CALIBRATION values measured on the real robot.
+coverage:
+  drive_speed: 0.5         # track speed while driving straight (0..1)
+  turn_speed: 0.5          # track speed while pivoting in place (0..1)
+  speed_m_s: 0.10          # CALIBRATE: ground speed in m/s at drive_speed
+  pivot_deg_s: 45.0        # CALIBRATE: rotation rate in deg/s at turn_speed
+  first_leg_m: 0.20        # first spiral segment
+  second_leg_m: 0.15       # second spiral segment
+  track_spacing_m: 0.15    # lane distance; every leg = leg two steps back + this
+  turn_direction: left     # left | right
+  obstacle_stop_m: 0.30    # stop when LiDAR sees something closer than this
+  obstacle_sector_deg: 60  # front sector width checked for obstacles
+  obstacle_wait_s: 3.0     # wait before trying to avoid (obstacle may move)
+  detour_m: 0.30           # sidestep distance when avoiding
+  max_avoid_attempts: 3    # abort run after this many failed avoidances
+
 # --- Camera ---
 camera:
   source: auto     # auto | picamera2 | usb | mock (auto = picamera2 if available)
   fps: 30
-  preview_fps: 5   # live preview refresh rate (single preview.jpg on disk)
+  preview_fps: 15  # live preview refresh rate (single preview.jpg on disk)
   width: 640
   height: 480
   usb_device: 0    # V4L2 index when source: usb

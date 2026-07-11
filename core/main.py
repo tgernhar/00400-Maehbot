@@ -16,6 +16,13 @@ from core.health import HealthMonitor
 from drive.command import consume_drive_command, write_drive_status
 from drive.controller import DriveController
 from drive.motor import MotorDriver, MotorPins
+from navigation.coverage import (
+    CoverageController,
+    consume_coverage_command,
+    write_coverage_status,
+)
+from navigation.lidar import LidarReader
+from navigation.motion import TimedMotionExecutor
 from spray.controller import SprayController
 from spray.gpio import create_gpio_backend, PinMap
 from spray.safety import evaluate_spray_allowed
@@ -53,6 +60,7 @@ class CoreApplication:
         self._init_gpio()
         self._init_spray()
         self._init_drive()
+        self._init_navigation()
         # Tank sensors belong to the spray hardware (vision node only)
         self.health = HealthMonitor(pins=self.pins if self.node.runs_vision else None)
         self.health.set_test_mode(bool(self.config.get("mode", {}).get("test_mode", True)))
@@ -125,6 +133,33 @@ class CoreApplication:
         )
         self._last_drive_status_write = 0.0
 
+    def _init_navigation(self) -> None:
+        """LiDAR + area coverage; only on nodes that control the motors."""
+        self.lidar: LidarReader | None = None
+        self.coverage: CoverageController | None = None
+        self._coverage_was_active = False
+        self._last_coverage_status_write = 0.0
+        if not self.node.runs_drive:
+            return
+        lidar_cfg = self.config.get("lidar", {})
+        if bool(lidar_cfg.get("enabled", True)) and not self.force_mock:
+            self.lidar = LidarReader(
+                port=str(lidar_cfg.get("port", "/dev/ttyUSB0")),
+                baud=int(lidar_cfg.get("baud", 230400)),
+                angle_offset_deg=float(lidar_cfg.get("angle_offset_deg", 0.0)),
+                preview_path=self.paths.lidar_preview_path,
+                preview_fps=float(lidar_cfg.get("preview_fps", 2)),
+                preview_range_m=float(lidar_cfg.get("preview_range_m", 4.0)),
+            )
+        cov_cfg = self.config.get("coverage", {})
+        self.motion = TimedMotionExecutor(
+            drive_speed=float(cov_cfg.get("drive_speed", 0.5)),
+            turn_speed=float(cov_cfg.get("turn_speed", 0.5)),
+            speed_m_s=float(cov_cfg.get("speed_m_s", 0.10)),
+            pivot_deg_s=float(cov_cfg.get("pivot_deg_s", 45.0)),
+        )
+        self.coverage = CoverageController(self.motion, self.lidar, self.config)
+
     def _local_config_mtime(self) -> float:
         p = get_config_dir() / "local.yaml"
         return p.stat().st_mtime if p.exists() else 0.0
@@ -157,6 +192,15 @@ class CoreApplication:
         )
         self.health.set_test_mode(bool(self.config.get("mode", {}).get("test_mode", True)))
         self._preview_interval_s = self._preview_interval_from_config()
+        if self.coverage:
+            cov_cfg = self.config.get("coverage", {})
+            self.motion.update_config(
+                drive_speed=float(cov_cfg.get("drive_speed", 0.5)),
+                turn_speed=float(cov_cfg.get("turn_speed", 0.5)),
+                speed_m_s=float(cov_cfg.get("speed_m_s", 0.10)),
+                pivot_deg_s=float(cov_cfg.get("pivot_deg_s", 45.0)),
+            )
+            self.coverage.update_config(self.config)
         logger.info("Config reloaded from local.yaml")
 
     def _on_detections(self, frame: Frame, detections: list[Detection]) -> None:
@@ -222,6 +266,9 @@ class CoreApplication:
     def _poll_drive(self) -> None:
         command = consume_drive_command(self.paths)
         if command is not None:
+            # Manual teleop always wins over an autonomous coverage run
+            if self.coverage and self.coverage.active:
+                self.coverage.stop("Manuelle Steuerung übernommen")
             self.drive_controller.set_speeds(
                 float(command.get("left", 0.0)),
                 float(command.get("right", 0.0)),
@@ -230,6 +277,40 @@ class CoreApplication:
         if now - self._last_drive_status_write > 0.5:
             write_drive_status(self.paths, self.drive_controller.status_dict())
             self._last_drive_status_write = now
+
+    def _poll_coverage(self) -> None:
+        if not self.coverage:
+            return
+        command = consume_coverage_command(self.paths)
+        if command:
+            action = str(command.get("action", "")).lower()
+            if action == "start":
+                self.coverage.start(
+                    float(command.get("length_m", 1.0)),
+                    float(command.get("width_m", 1.0)),
+                )
+            elif action == "stop":
+                self.coverage.stop("Manuell gestoppt")
+            else:
+                logger.warning("Unknown coverage action: %s", action)
+            write_coverage_status(self.paths, self.coverage.status_dict())
+            self._last_coverage_status_write = time.monotonic()
+
+        if self.coverage.active:
+            left, right = self.coverage.tick()
+            self.drive_controller.set_speeds(left, right)
+            self._coverage_was_active = True
+        elif self._coverage_was_active:
+            # Run just ended (done/aborted): make sure the motors stop now
+            self.drive_controller.stop_motion()
+            self._coverage_was_active = False
+            write_coverage_status(self.paths, self.coverage.status_dict())
+            self._last_coverage_status_write = time.monotonic()
+
+        now = time.monotonic()
+        if now - self._last_coverage_status_write > 0.5:
+            write_coverage_status(self.paths, self.coverage.status_dict())
+            self._last_coverage_status_write = now
 
     def _handle_snapshot(self, name: str) -> None:
         if self.recorder.state != RecordingState.IDLE:
@@ -328,6 +409,10 @@ class CoreApplication:
         if self.node.runs_drive:
             self.drive_controller.start()
             write_drive_status(self.paths, self.drive_controller.status_dict())
+            if self.lidar:
+                self.lidar.start()
+            if self.coverage:
+                write_coverage_status(self.paths, self.coverage.status_dict())
 
         self._preview_camera = None
         if self.node.runs_vision:
@@ -357,6 +442,7 @@ class CoreApplication:
             self._poll_recording()
             if self.node.runs_drive:
                 self._poll_drive()
+                self._poll_coverage()
             if self.pipeline:
                 if not self.pipeline.process_one():
                     time.sleep(0.01)
@@ -373,6 +459,10 @@ class CoreApplication:
                 time.sleep(0.02)
 
     def shutdown(self) -> None:
+        if self.coverage:
+            self.coverage.stop("Core-Prozess beendet")
+        if self.lidar:
+            self.lidar.stop()
         if self.pipeline:
             self.pipeline.stop()
         if self._preview_camera:

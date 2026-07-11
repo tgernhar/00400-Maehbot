@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pyyaml>=6.0",
     "pillow>=10.0",
+    "pyserial>=3.5",
 ]
 
 [project.optional-dependencies]
@@ -43,7 +44,7 @@ maehbot-web = "web.backend.app:run"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["maehbot*", "vision*", "spray*", "drive*", "storage*", "training*", "core*", "web*"]
+include = ["maehbot*", "vision*", "spray*", "drive*", "storage*", "training*", "core*", "web*", "navigation*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

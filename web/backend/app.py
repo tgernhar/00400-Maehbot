@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from drive.command import queue_drive_command, read_drive_status
 from maehbot.config_loader import get_project_root, load_config, save_local_config
+from navigation.coverage import queue_coverage_command, read_coverage_status
 from maehbot.node import NodeConfig
 from storage.database import Database
 from storage.paths import StoragePaths
@@ -39,6 +40,10 @@ from web.backend.schemas import (
     AnnotationOut,
     BBoxSchema,
     ClassOut,
+    CoverageConfigIn,
+    CoverageConfigOut,
+    CoverageStartIn,
+    CoverageStatusOut,
     DetectionOut,
     DriveCommandIn,
     DriveConfigIn,
@@ -440,6 +445,91 @@ def post_drive_stop(
 ) -> DriveStatusOut:
     queue_drive_command(state["paths"], 0.0, 0.0)
     return DriveStatusOut(**read_drive_status(state["paths"]))
+
+
+@app.get("/api/lidar/preview")
+def get_lidar_preview(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> Response:
+    path = state["paths"].lidar_preview_path
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="LiDAR-Bild noch nicht verfügbar")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
+@app.get("/api/coverage/status", response_model=CoverageStatusOut)
+def get_coverage_status(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> CoverageStatusOut:
+    return CoverageStatusOut(**read_coverage_status(state["paths"]))
+
+
+@app.post("/api/coverage/start", response_model=CoverageStatusOut)
+def post_coverage_start(
+    body: CoverageStartIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> CoverageStatusOut:
+    current = read_coverage_status(state["paths"])
+    if current.get("state") in ("driving", "turning", "avoiding"):
+        raise HTTPException(status_code=409, detail="Bereichsfahrt läuft bereits")
+    queue_coverage_command(state["paths"], "start", body.length_m, body.width_m)
+    return CoverageStatusOut(**read_coverage_status(state["paths"]))
+
+
+@app.post("/api/coverage/stop", response_model=CoverageStatusOut)
+def post_coverage_stop(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> CoverageStatusOut:
+    queue_coverage_command(state["paths"], "stop")
+    return CoverageStatusOut(**read_coverage_status(state["paths"]))
+
+
+def _coverage_config_out(config: dict[str, Any]) -> CoverageConfigOut:
+    cov = config.get("coverage", {})
+    return CoverageConfigOut(
+        drive_speed=float(cov.get("drive_speed", 0.5)),
+        turn_speed=float(cov.get("turn_speed", 0.5)),
+        speed_m_s=float(cov.get("speed_m_s", 0.10)),
+        pivot_deg_s=float(cov.get("pivot_deg_s", 45.0)),
+        first_leg_m=float(cov.get("first_leg_m", 0.20)),
+        second_leg_m=float(cov.get("second_leg_m", 0.15)),
+        track_spacing_m=float(cov.get("track_spacing_m", 0.15)),
+        turn_direction=str(cov.get("turn_direction", "left")),
+        obstacle_stop_m=float(cov.get("obstacle_stop_m", 0.30)),
+        obstacle_sector_deg=float(cov.get("obstacle_sector_deg", 60.0)),
+        obstacle_wait_s=float(cov.get("obstacle_wait_s", 3.0)),
+        detour_m=float(cov.get("detour_m", 0.30)),
+        max_avoid_attempts=int(cov.get("max_avoid_attempts", 3)),
+    )
+
+
+@app.get("/api/config/coverage", response_model=CoverageConfigOut)
+def get_coverage_config(state: dict[str, Any] = Depends(get_app_state)) -> CoverageConfigOut:
+    return _coverage_config_out(state["config"])
+
+
+@app.put("/api/config/coverage", response_model=CoverageConfigOut)
+def put_coverage_config(
+    body: CoverageConfigIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> CoverageConfigOut:
+    updates: dict[str, Any] = {"coverage": {}}
+    for field in CoverageConfigIn.model_fields:
+        value = getattr(body, field)
+        if value is not None:
+            updates["coverage"][field] = value
+    save_local_config(updates)
+    reload_config(state)
+    return _coverage_config_out(state["config"])
 
 
 @app.get("/api/training/sessions", response_model=list[TrainingSessionOut])

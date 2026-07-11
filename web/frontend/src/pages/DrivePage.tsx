@@ -1,19 +1,67 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   cameraPreviewUrl,
+  CoverageConfig,
+  CoverageStatus,
   DriveConfig,
   DriveStatus,
+  fetchCoverageConfig,
+  fetchCoverageStatus,
   fetchDriveConfig,
   fetchDriveStatus,
+  lidarPreviewUrl,
   sendDriveCommand,
+  startCoverage,
+  stopCoverage,
   stopDrive,
+  updateCoverageConfig,
   updateDriveConfig,
 } from "../api";
 
 const KEEPALIVE_MS = 300;
-const PREVIEW_REFRESH_MS = 500;
+const PREVIEW_REFRESH_MS = 66; // ~15 fps, passend zu camera.preview_fps
+const LIDAR_REFRESH_MS = 500; // ~2 fps, passend zu lidar.preview_fps
+
+const COVERAGE_STATE_LABELS: Record<CoverageStatus["state"], string> = {
+  idle: "Bereit",
+  driving: "fährt Bahn",
+  turning: "dreht",
+  avoiding: "weicht Hindernis aus",
+  done: "Bereich abgefahren",
+  aborted: "abgebrochen",
+};
 
 type Vec = { left: number; right: number };
+
+const FORWARD: Vec = { left: 1, right: 1 };
+const BACKWARD: Vec = { left: -1, right: -1 };
+const TURN_LEFT: Vec = { left: -1, right: 1 };
+const TURN_RIGHT: Vec = { left: 1, right: -1 };
+
+/** Pfeiltasten gedreht (Kamera/Fahrtrichtung): links←unten, unten←rechts, rechts←oben, oben←links */
+const ARROW_KEY_MAP: Record<string, Vec> = {
+  ArrowLeft: BACKWARD,
+  ArrowDown: TURN_RIGHT,
+  ArrowRight: FORWARD,
+  ArrowUp: TURN_LEFT,
+};
+
+function useSmoothPreview(urlFactory: (t: number) => string, refreshMs: number): string {
+  const [src, setSrc] = useState(() => urlFactory(Date.now()));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const next = urlFactory(Date.now());
+      const img = new Image();
+      img.onload = () => setSrc(next);
+      img.onerror = () => undefined;
+      img.src = next;
+    }, refreshMs);
+    return () => clearInterval(timer);
+  }, [urlFactory, refreshMs]);
+
+  return src;
+}
 
 export default function DrivePage() {
   const [config, setConfig] = useState<DriveConfig | null>(null);
@@ -21,8 +69,15 @@ export default function DrivePage() {
   const [speed, setSpeed] = useState(0.6);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [previewTick, setPreviewTick] = useState(Date.now());
   const [previewAvailable, setPreviewAvailable] = useState(true);
+  const previewSrc = useSmoothPreview(cameraPreviewUrl, PREVIEW_REFRESH_MS);
+  const [lidarAvailable, setLidarAvailable] = useState(true);
+  const lidarSrc = useSmoothPreview(lidarPreviewUrl, LIDAR_REFRESH_MS);
+
+  const [coverage, setCoverage] = useState<CoverageStatus | null>(null);
+  const [coverageConfig, setCoverageConfig] = useState<CoverageConfig | null>(null);
+  const [areaLength, setAreaLength] = useState(1.0);
+  const [areaWidth, setAreaWidth] = useState(1.0);
 
   const keepalive = useRef<number | null>(null);
   const current = useRef<Vec>({ left: 0, right: 0 });
@@ -30,12 +85,13 @@ export default function DrivePage() {
   useEffect(() => {
     fetchDriveConfig().then(setConfig).catch(() => undefined);
     fetchDriveStatus().then(setStatus).catch(() => undefined);
-    const t = setInterval(() => fetchDriveStatus().then(setStatus).catch(() => undefined), 1000);
-    const p = setInterval(() => setPreviewTick(Date.now()), PREVIEW_REFRESH_MS);
-    return () => {
-      clearInterval(t);
-      clearInterval(p);
-    };
+    fetchCoverageConfig().then(setCoverageConfig).catch(() => undefined);
+    fetchCoverageStatus().then(setCoverage).catch(() => undefined);
+    const t = setInterval(() => {
+      fetchDriveStatus().then(setStatus).catch(() => undefined);
+      fetchCoverageStatus().then(setCoverage).catch(() => undefined);
+    }, 1000);
+    return () => clearInterval(t);
   }, []);
 
   const clearKeepalive = useCallback(() => {
@@ -70,14 +126,11 @@ export default function DrivePage() {
 
   useEffect(() => {
     const keyMap: Record<string, Vec> = {
-      ArrowUp: { left: 1, right: 1 },
-      ArrowDown: { left: -1, right: -1 },
-      ArrowLeft: { left: -1, right: 1 },
-      ArrowRight: { left: 1, right: -1 },
-      w: { left: 1, right: 1 },
-      s: { left: -1, right: -1 },
-      a: { left: -1, right: 1 },
-      d: { left: 1, right: -1 },
+      ...ARROW_KEY_MAP,
+      w: FORWARD,
+      s: BACKWARD,
+      a: TURN_LEFT,
+      d: TURN_RIGHT,
     };
     const onDown = (e: KeyboardEvent) => {
       const v = keyMap[e.key];
@@ -127,6 +180,64 @@ export default function DrivePage() {
     }
   }
 
+  const coverageActive =
+    coverage?.state === "driving" ||
+    coverage?.state === "turning" ||
+    coverage?.state === "avoiding";
+
+  async function handleStartCoverage() {
+    setError(null);
+    try {
+      setCoverage(await startCoverage(areaLength, areaWidth));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    }
+  }
+
+  async function handleStopCoverage() {
+    setError(null);
+    try {
+      setCoverage(await stopCoverage());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    }
+  }
+
+  async function saveCoverageConfig() {
+    if (!coverageConfig) return;
+    setError(null);
+    try {
+      const saved = await updateCoverageConfig(coverageConfig);
+      setCoverageConfig(saved);
+      setMessage("Fahrparameter gespeichert");
+      setTimeout(() => setMessage(null), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    }
+  }
+
+  const numberField = (
+    label: string,
+    key: keyof CoverageConfig,
+    step: number,
+    hint?: string
+  ) =>
+    coverageConfig && (
+      <label>
+        {label}
+        {hint && <span className="muted">{hint}</span>}
+        <input
+          type="number"
+          step={step}
+          min={0}
+          value={coverageConfig[key] as number}
+          onChange={(e) =>
+            setCoverageConfig({ ...coverageConfig, [key]: Number(e.target.value) })
+          }
+        />
+      </label>
+    );
+
   return (
     <div>
       <h1>Fahren</h1>
@@ -168,15 +279,15 @@ export default function DrivePage() {
 
           <div className="drive-pad">
             <div />
-            {padBtn("▲", { left: 1, right: 1 })}
+            {padBtn("▲", TURN_LEFT)}
             <div />
-            {padBtn("◀", { left: -1, right: 1 })}
+            {padBtn("◀", BACKWARD)}
             <button type="button" className="drive-btn stop" onClick={release}>
               ■
             </button>
-            {padBtn("▶", { left: 1, right: -1 })}
+            {padBtn("▶", FORWARD)}
             <div />
-            {padBtn("▼", { left: -1, right: -1 })}
+            {padBtn("▼", TURN_RIGHT)}
             <div />
           </div>
         </div>
@@ -184,7 +295,7 @@ export default function DrivePage() {
         <div className="drive-preview">
           <h2>Kamerabild</h2>
           <img
-            src={cameraPreviewUrl(previewTick)}
+            src={previewSrc}
             alt="Kameravorschau"
             className="camera-preview"
             style={{ display: previewAvailable ? "block" : "none" }}
@@ -196,8 +307,126 @@ export default function DrivePage() {
               <p className="muted">Kameravorschau noch nicht verfügbar.</p>
             </div>
           )}
+
+          <h2>LiDAR</h2>
+          <img
+            src={lidarSrc}
+            alt="LiDAR-Rundumsicht"
+            className="lidar-preview"
+            style={{ display: lidarAvailable ? "block" : "none" }}
+            onError={() => setLidarAvailable(false)}
+            onLoad={() => setLidarAvailable(true)}
+          />
+          {!lidarAvailable && (
+            <div className="drive-preview-placeholder">
+              <p className="muted">LiDAR-Bild nicht verfügbar.</p>
+            </div>
+          )}
         </div>
       </div>
+
+      <div className="coverage-panel">
+        <h2>Bereich abfahren</h2>
+        <p className="muted">
+          Der Roboter fährt ab seiner aktuellen Position eine Rechteck-Spirale nach außen, bis
+          der angegebene Bereich abgedeckt ist. Der LiDAR überwacht dabei Hindernisse.
+        </p>
+        <div className="coverage-controls">
+          <label>
+            Länge (m)
+            <input
+              type="number"
+              step={0.1}
+              min={0.1}
+              value={areaLength}
+              disabled={coverageActive}
+              onChange={(e) => setAreaLength(Number(e.target.value))}
+            />
+          </label>
+          <label>
+            Breite (m)
+            <input
+              type="number"
+              step={0.1}
+              min={0.1}
+              value={areaWidth}
+              disabled={coverageActive}
+              onChange={(e) => setAreaWidth(Number(e.target.value))}
+            />
+          </label>
+          {!coverageActive ? (
+            <button type="button" onClick={handleStartCoverage}>
+              Bereich abfahren
+            </button>
+          ) : (
+            <button type="button" className="danger-btn" onClick={handleStopCoverage}>
+              Fahrt stoppen
+            </button>
+          )}
+        </div>
+        {coverage && (
+          <div className="drive-status-row">
+            <span className={`badge ${coverageActive ? "ok" : coverage.state === "aborted" ? "error" : ""}`}>
+              {COVERAGE_STATE_LABELS[coverage.state]}
+            </span>
+            {coverage.leg_count > 0 && (
+              <span className="badge">
+                Bahn {Math.min(coverage.leg_index + 1, coverage.leg_count)} / {coverage.leg_count}
+              </span>
+            )}
+            {coverage.leg_count > 0 && (
+              <span className="badge">Fortschritt: {coverage.progress_percent.toFixed(0)} %</span>
+            )}
+            <span className={`badge ${coverage.lidar_connected ? "ok" : "warn"}`}>
+              {coverage.lidar_connected ? "LiDAR verbunden" : "LiDAR nicht verbunden"}
+            </span>
+          </div>
+        )}
+        {coverage?.error && <p className="error">{coverage.error}</p>}
+      </div>
+
+      {coverageConfig && (
+        <div className="coverage-panel">
+          <h2>Parameter Spiralfahrt</h2>
+          <p className="muted">
+            Ohne Drehgeber wird zeitbasiert gefahren: „Tempo (m/s)“ und „Drehrate (°/s)“ sind
+            Kalibrierwerte — auf dem Rasen messen (z. B. 2 m fahren und Zeit stoppen) und hier
+            eintragen.
+          </p>
+          <div className="coverage-grid">
+            {numberField("Kettentempo geradeaus (0–1)", "drive_speed", 0.05)}
+            {numberField("Kettentempo drehen (0–1)", "turn_speed", 0.05)}
+            {numberField("Tempo (m/s) — Kalibrierwert", "speed_m_s", 0.01)}
+            {numberField("Drehrate (°/s) — Kalibrierwert", "pivot_deg_s", 1)}
+            {numberField("Erstes Segment (m)", "first_leg_m", 0.05)}
+            {numberField("Zweites Segment (m)", "second_leg_m", 0.05)}
+            {numberField("Bahnabstand (m)", "track_spacing_m", 0.05)}
+            <label>
+              Drehrichtung
+              <select
+                value={coverageConfig.turn_direction}
+                onChange={(e) =>
+                  setCoverageConfig({
+                    ...coverageConfig,
+                    turn_direction: e.target.value as "left" | "right",
+                  })
+                }
+              >
+                <option value="left">links</option>
+                <option value="right">rechts</option>
+              </select>
+            </label>
+            {numberField("Hindernis-Stoppdistanz (m)", "obstacle_stop_m", 0.05)}
+            {numberField("Hindernis-Sektor (°)", "obstacle_sector_deg", 5)}
+            {numberField("Wartezeit vor Ausweichen (s)", "obstacle_wait_s", 0.5)}
+            {numberField("Ausweichstrecke (m)", "detour_m", 0.05)}
+            {numberField("Max. Ausweichversuche", "max_avoid_attempts", 1)}
+          </div>
+          <button type="button" onClick={saveCoverageConfig}>
+            Fahrparameter speichern
+          </button>
+        </div>
+      )}
 
       {config && (
         <div className="drive-config">

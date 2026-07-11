@@ -57,6 +57,33 @@ export interface DriveConfig {
   invert_right: boolean;
 }
 
+export interface CoverageStatus {
+  state: "idle" | "driving" | "turning" | "avoiding" | "done" | "aborted";
+  length_m: number;
+  width_m: number;
+  leg_index: number;
+  leg_count: number;
+  progress_percent: number;
+  lidar_connected: boolean;
+  error: string | null;
+}
+
+export interface CoverageConfig {
+  drive_speed: number;
+  turn_speed: number;
+  speed_m_s: number;
+  pivot_deg_s: number;
+  first_leg_m: number;
+  second_leg_m: number;
+  track_spacing_m: number;
+  turn_direction: "left" | "right";
+  obstacle_stop_m: number;
+  obstacle_sector_deg: number;
+  obstacle_wait_s: number;
+  detour_m: number;
+  max_avoid_attempts: number;
+}
+
 export interface TrainingSession {
   id: number;
   name: string;
@@ -161,6 +188,52 @@ export async function stopDrive(): Promise<DriveStatus> {
   const r = await fetch(`${API}/drive/stop`, { method: "POST" });
   if (!r.ok) throw new Error("Stopp fehlgeschlagen");
   return r.json();
+}
+
+export async function fetchCoverageStatus(): Promise<CoverageStatus> {
+  const r = await fetch(`${API}/coverage/status`);
+  if (!r.ok) throw new Error("Bereichsfahrt-Status laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function startCoverage(lengthM: number, widthM: number): Promise<CoverageStatus> {
+  const r = await fetch(`${API}/coverage/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ length_m: lengthM, width_m: widthM }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Bereichsfahrt starten fehlgeschlagen");
+  }
+  return r.json();
+}
+
+export async function stopCoverage(): Promise<CoverageStatus> {
+  const r = await fetch(`${API}/coverage/stop`, { method: "POST" });
+  if (!r.ok) throw new Error("Bereichsfahrt stoppen fehlgeschlagen");
+  return r.json();
+}
+
+export async function fetchCoverageConfig(): Promise<CoverageConfig> {
+  const r = await fetch(`${API}/config/coverage`);
+  if (!r.ok) throw new Error("Fahrparameter laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function updateCoverageConfig(cfg: Partial<CoverageConfig>): Promise<CoverageConfig> {
+  const r = await fetch(`${API}/config/coverage`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cfg),
+  });
+  if (!r.ok) throw new Error("Fahrparameter speichern fehlgeschlagen");
+  return r.json();
+}
+
+export function lidarPreviewUrl(cacheBust?: number): string {
+  const q = cacheBust != null ? `?t=${cacheBust}` : "";
+  return `${API}/lidar/preview${q}`;
 }
 
 export async function fetchClasses(): Promise<PlantClass[]> {
