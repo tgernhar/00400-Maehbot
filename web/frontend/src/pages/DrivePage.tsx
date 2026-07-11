@@ -39,12 +39,12 @@ const BACKWARD: Vec = { left: -1, right: -1 };
 const TURN_LEFT: Vec = { left: -1, right: 1 };
 const TURN_RIGHT: Vec = { left: 1, right: -1 };
 
-/** Vorwärts/Rückwärts auf linke/rechte Pfeiltaste (getauscht): links=vorwärts, rechts=rückwärts */
+/** Pfeiltasten: links=rückwärts, rechts=vorwärts, hoch=rechts drehen, runter=links drehen */
 const ARROW_KEY_MAP: Record<string, Vec> = {
-  ArrowLeft: FORWARD,
-  ArrowDown: TURN_RIGHT,
-  ArrowRight: BACKWARD,
-  ArrowUp: TURN_LEFT,
+  ArrowLeft: BACKWARD,
+  ArrowDown: TURN_LEFT,
+  ArrowRight: FORWARD,
+  ArrowUp: TURN_RIGHT,
 };
 
 function useSmoothPreview(urlFactory: (t: number) => string, refreshMs: number): string {
@@ -329,15 +329,15 @@ export default function DrivePage() {
 
             <div className="drive-pad">
               <div />
-              {padBtn("▲", TURN_LEFT)}
+              {padBtn("▲", TURN_RIGHT)}
               <div />
-              {padBtn("◀", FORWARD)}
+              {padBtn("◀", BACKWARD)}
               <button type="button" className="drive-btn stop" onClick={release}>
                 ■
               </button>
-              {padBtn("▶", BACKWARD)}
+              {padBtn("▶", FORWARD)}
               <div />
-              {padBtn("▼", TURN_RIGHT)}
+              {padBtn("▼", TURN_LEFT)}
               <div />
             </div>
           </div>
