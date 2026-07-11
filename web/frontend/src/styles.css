@@ -277,6 +277,55 @@ button {
   padding: 0.5rem;
 }
 
+.servo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.servo-card {
+  padding: 1rem;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #141a22;
+}
+
+.servo-card h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+}
+
+.servo-card .muted {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.servo-slider-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.servo-slider-row input[type="range"] {
+  flex: 1;
+}
+
+.servo-slider-row input[type="number"] {
+  width: 80px;
+  padding: 0.4rem;
+}
+
+.servo-range {
+  margin: 0.5rem 0 0;
+}
+
+.servo-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
 .drive-status-row {
   display: flex;
   flex-wrap: wrap;

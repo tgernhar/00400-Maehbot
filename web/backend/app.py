@@ -17,6 +17,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from drive.command import queue_drive_command, read_drive_status
+from spray.servo import SERVO_NAMES, servo_limits
+from spray.servo_command import queue_servo_command, read_servo_status
 from maehbot.config_loader import get_project_root, load_config, save_local_config
 from navigation.coverage import queue_coverage_command, read_coverage_status
 from maehbot.node import NodeConfig
@@ -54,6 +56,10 @@ from web.backend.schemas import (
     ModeConfigOut,
     RecordingStartIn,
     RecordingStatusOut,
+    ServoConfigOut,
+    ServoLimitOut,
+    ServoStatusOut,
+    ServoTestIn,
     SprayConfigIn,
     SprayConfigOut,
     StatusOut,
@@ -445,6 +451,71 @@ def post_drive_stop(
 ) -> DriveStatusOut:
     queue_drive_command(state["paths"], 0.0, 0.0)
     return DriveStatusOut(**read_drive_status(state["paths"]))
+
+
+def _servo_config_out(config: dict[str, Any]) -> ServoConfigOut:
+    servo_cfg = config.get("servo", {})
+    test_angles = servo_cfg.get("test_angles", {}) or {}
+    limits = servo_limits(servo_cfg)
+    return ServoConfigOut(
+        test_angles={
+            name: float(test_angles.get(name, 0.0)) for name in SERVO_NAMES
+        },
+        limits={
+            name: ServoLimitOut(min_angle=lo, max_angle=hi)
+            for name, (lo, hi) in limits.items()
+        },
+    )
+
+
+@app.get("/api/servo/status", response_model=ServoStatusOut)
+def get_servo_status(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> ServoStatusOut:
+    return ServoStatusOut(**read_servo_status(state["paths"]))
+
+
+@app.get("/api/config/servo", response_model=ServoConfigOut)
+def get_servo_config(state: dict[str, Any] = Depends(get_app_state)) -> ServoConfigOut:
+    return _servo_config_out(state["config"])
+
+
+@app.post("/api/servo/test", response_model=ServoStatusOut)
+def post_servo_test(
+    body: ServoTestIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> ServoStatusOut:
+    angles = {"position": body.position, "tension": body.tension, "trigger": body.trigger}
+    limits = servo_limits(state["config"].get("servo", {}))
+    for name, angle in angles.items():
+        lo, hi = limits[name]
+        if not lo <= angle <= hi:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Winkel für Servo '{name}' muss zwischen {lo:g}° und {hi:g}° liegen",
+            )
+    current = read_servo_status(state["paths"])
+    if current.get("state") not in (None, "idle"):
+        raise HTTPException(status_code=409, detail="Servo-Sequenz läuft bereits")
+    # Persist slider values so the UI restores them after reload
+    save_local_config({"servo": {"test_angles": angles}})
+    reload_config(state)
+    queue_servo_command(state["paths"], "test", angles)
+    return ServoStatusOut(**read_servo_status(state["paths"]))
+
+
+@app.post("/api/servo/home", response_model=ServoStatusOut)
+def post_servo_home(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> ServoStatusOut:
+    current = read_servo_status(state["paths"])
+    if current.get("state") not in (None, "idle"):
+        raise HTTPException(status_code=409, detail="Servo-Sequenz läuft bereits")
+    queue_servo_command(state["paths"], "home")
+    return ServoStatusOut(**read_servo_status(state["paths"]))
 
 
 @app.get("/api/lidar/preview")

@@ -15,6 +15,7 @@ def client(tmp_path):
 
     def _state():
         from maehbot.config_loader import load_config
+        from maehbot.node import NodeConfig
         from storage.database import Database
         from storage.paths import StoragePaths
         from web.backend.auth import hash_password
@@ -27,6 +28,7 @@ def client(tmp_path):
             app_module._state["config"] = config
             app_module._state["paths"] = paths
             app_module._state["db"] = Database(paths.db_path)
+            app_module._state["node"] = NodeConfig(config)
             app_module._state["password_hash"] = hash_password("maehbot")
         return app_module._state
 
@@ -62,6 +64,61 @@ def test_spa_training_route(client):
     assert r.status_code == 200
     assert "text/html" in r.headers.get("content-type", "")
     assert "Maehbot" in r.text or "root" in r.text
+
+
+def test_servo_config_get(client):
+    r = client.get("/api/config/servo")
+    assert r.status_code == 200
+    data = r.json()
+    assert "position" in data["test_angles"]
+    assert data["limits"]["trigger"]["max_angle"] == 45
+
+
+def test_servo_status_default(client):
+    r = client.get("/api/servo/status")
+    assert r.status_code == 200
+    assert r.json()["state"] == "idle"
+
+
+def test_servo_test_queues_command(client, monkeypatch):
+    from spray.servo_command import consume_servo_command
+    import web.backend.app as m
+
+    # Keep persisted slider values out of the real config/local.yaml
+    monkeypatch.setattr(m, "save_local_config", lambda updates: None)
+    monkeypatch.setattr(m, "reload_config", lambda state: state["config"])
+
+    state = app.dependency_overrides[get_app_state]()
+    paths = state["paths"]
+    r = client.post(
+        "/api/servo/test",
+        json={"position": 90, "tension": 120, "trigger": 30},
+    )
+    assert r.status_code == 200
+    cmd = consume_servo_command(paths)
+    assert cmd is not None
+    assert cmd["action"] == "test"
+    assert cmd["angles"] == {"position": 90.0, "tension": 120.0, "trigger": 30.0}
+
+
+def test_servo_test_rejects_out_of_range(client):
+    r = client.post(
+        "/api/servo/test",
+        json={"position": 0, "tension": 0, "trigger": 90},
+    )
+    assert r.status_code == 422
+
+
+def test_servo_home_queues_command(client):
+    from spray.servo_command import consume_servo_command
+
+    state = app.dependency_overrides[get_app_state]()
+    paths = state["paths"]
+    r = client.post("/api/servo/home")
+    assert r.status_code == 200
+    cmd = consume_servo_command(paths)
+    assert cmd is not None
+    assert cmd["action"] == "home"
 
 
 def test_snapshot_recording_queues_command(client, tmp_path):

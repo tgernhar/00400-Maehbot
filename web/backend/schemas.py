@@ -70,6 +70,28 @@ class DriveConfigOut(BaseModel):
     invert_right: bool
 
 
+class ServoTestIn(BaseModel):
+    position: float  # servo 1 target angle (deg)
+    tension: float   # servo 2 target angle (deg)
+    trigger: float   # servo 3 target angle (deg)
+
+
+class ServoStatusOut(BaseModel):
+    state: str = "idle"
+    angles: dict[str, float | None] = Field(default_factory=dict)
+    error: str | None = None
+
+
+class ServoLimitOut(BaseModel):
+    min_angle: float
+    max_angle: float
+
+
+class ServoConfigOut(BaseModel):
+    test_angles: dict[str, float]
+    limits: dict[str, ServoLimitOut]
+
+
 class CoverageStartIn(BaseModel):
     length_m: float = Field(default=1.0, gt=0.0, le=100.0)
     width_m: float = Field(default=1.0, gt=0.0, le=100.0)

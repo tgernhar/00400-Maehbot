@@ -16,3 +16,28 @@ motor:
   right_in2: 26    # BIN2  (physical pin 37)
   right_pwm: 13    # PWMB  (physical pin 33)
   pwm_frequency_hz: 1000
+
+# Spray servos (BCM). Signal pins only — power the servos from an external
+# 5-6 V supply (NOT the Pi 5V rail) with common ground to the Pi.
+# Calibrate angle range / pulse widths per servo type in config/local.yaml.
+servo:
+  pwm_frequency_hz: 50
+  step_delay_ms: 800   # wait between sequence steps so servos finish moving
+  position:            # servo 1 — nozzle positioning
+    pin: 18            # physical pin 12
+    min_angle: -180
+    max_angle: 180
+    min_pulse_us: 500
+    max_pulse_us: 2500
+  tension:             # servo 2 — pressure/tension servo
+    pin: 19            # physical pin 35
+    min_angle: -45
+    max_angle: 180
+    min_pulse_us: 500
+    max_pulse_us: 2500
+  trigger:             # servo 3 — actuation mechanism
+    pin: 20            # physical pin 38
+    min_angle: 0
+    max_angle: 45
+    min_pulse_us: 500
+    max_pulse_us: 2500

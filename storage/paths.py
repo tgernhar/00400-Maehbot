@@ -22,6 +22,8 @@ class StoragePaths:
         self.drive_command_path = self.root / "drive_command.json"
         self.coverage_status_path = self.root / "coverage_status.json"
         self.coverage_command_path = self.root / "coverage_command.json"
+        self.servo_status_path = self.root / "servo_status.json"
+        self.servo_command_path = self.root / "servo_command.json"
         self.lidar_preview_path = self.root / "lidar.jpg"
 
     def ensure(self) -> None:

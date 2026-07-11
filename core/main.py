@@ -27,6 +27,8 @@ from spray.controller import SprayController
 from spray.gpio import create_gpio_backend, PinMap
 from spray.safety import evaluate_spray_allowed
 from spray.scheduler import SprayScheduler
+from spray.servo import ServoSequencer
+from spray.servo_command import consume_servo_command, write_servo_status
 from storage.async_writer import AsyncStorageWriter
 from storage.database import Database
 from storage.paths import StoragePaths
@@ -59,6 +61,7 @@ class CoreApplication:
         self._init_storage()
         self._init_gpio()
         self._init_spray()
+        self._init_servo()
         self._init_drive()
         self._init_navigation()
         # Tank sensors belong to the spray hardware (vision node only)
@@ -115,6 +118,11 @@ class CoreApplication:
             self.pins,
             duration_ms=float(spray_cfg.get("duration_ms", 100)),
         )
+
+    def _init_servo(self) -> None:
+        servo_cfg = self.config.get("servo", {})
+        self.servo_sequencer = ServoSequencer(self.gpio_backend, servo_cfg)
+        self._last_servo_status_write = 0.0
 
     def _init_drive(self) -> None:
         drive_cfg = self.config.get("drive", {})
@@ -182,6 +190,8 @@ class CoreApplication:
             mower_speed_mm_s=float(spray_cfg.get("mower_speed_mm_s", 100)),
         )
         self.spray_controller.update_duration(float(spray_cfg.get("duration_ms", 100)))
+        servo_cfg = self.config.get("servo", {})
+        self.servo_sequencer.step_delay_s = float(servo_cfg.get("step_delay_ms", 800)) / 1000.0
         drive_cfg = self.config.get("drive", {})
         self.drive_controller.update_config(
             max_speed=float(drive_cfg.get("max_speed", 1.0)),
@@ -277,6 +287,36 @@ class CoreApplication:
         if now - self._last_drive_status_write > 0.5:
             write_drive_status(self.paths, self.drive_controller.status_dict())
             self._last_drive_status_write = now
+
+    def _poll_servo(self) -> None:
+        command = consume_servo_command(self.paths)
+        if command is not None:
+            action = str(command.get("action", "")).lower()
+            started = False
+            if action == "home":
+                started = self.servo_sequencer.run_home()
+            elif action == "test":
+                angles = command.get("angles", {}) or {}
+                started = self.servo_sequencer.run_test(
+                    position=float(angles.get("position", 0.0)),
+                    tension=float(angles.get("tension", 0.0)),
+                    trigger=float(angles.get("trigger", 0.0)),
+                )
+            else:
+                logger.warning("Unknown servo action: %s", action)
+            if action in ("home", "test") and not started:
+                status = self.servo_sequencer.status_dict()
+                status["error"] = "Sequenz läuft bereits"
+                write_servo_status(self.paths, status)
+                self._last_servo_status_write = time.monotonic()
+                return
+            write_servo_status(self.paths, self.servo_sequencer.status_dict())
+            self._last_servo_status_write = time.monotonic()
+
+        now = time.monotonic()
+        if now - self._last_servo_status_write > 0.5:
+            write_servo_status(self.paths, self.servo_sequencer.status_dict())
+            self._last_servo_status_write = now
 
     def _poll_coverage(self) -> None:
         if not self.coverage:
@@ -406,6 +446,11 @@ class CoreApplication:
         self._last_preview_write = now
 
     def run(self) -> None:
+        # Servos must reach a defined home position before anything else moves
+        self.servo_sequencer.setup()
+        self.servo_sequencer.run_home()
+        write_servo_status(self.paths, self.servo_sequencer.status_dict())
+
         if self.node.runs_drive:
             self.drive_controller.start()
             write_drive_status(self.paths, self.drive_controller.status_dict())
@@ -440,6 +485,7 @@ class CoreApplication:
         while True:
             self.reload_config_if_changed()
             self._poll_recording()
+            self._poll_servo()
             if self.node.runs_drive:
                 self._poll_drive()
                 self._poll_coverage()
@@ -473,6 +519,7 @@ class CoreApplication:
             self.spray_controller.stop()
         if self.node.runs_drive:
             self.drive_controller.stop()
+        self.servo_sequencer.stop()
         self.writer.stop()
         self.gpio_backend.close()
 

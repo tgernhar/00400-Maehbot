@@ -84,6 +84,28 @@ export interface CoverageConfig {
   max_avoid_attempts: number;
 }
 
+export interface ServoAngles {
+  position: number;
+  tension: number;
+  trigger: number;
+}
+
+export interface ServoStatus {
+  state: "idle" | "homing" | "testing";
+  angles: Record<string, number | null>;
+  error: string | null;
+}
+
+export interface ServoLimit {
+  min_angle: number;
+  max_angle: number;
+}
+
+export interface ServoConfig {
+  test_angles: ServoAngles;
+  limits: Record<keyof ServoAngles, ServoLimit>;
+}
+
 export interface TrainingSession {
   id: number;
   name: string;
@@ -228,6 +250,40 @@ export async function updateCoverageConfig(cfg: Partial<CoverageConfig>): Promis
     body: JSON.stringify(cfg),
   });
   if (!r.ok) throw new Error("Fahrparameter speichern fehlgeschlagen");
+  return r.json();
+}
+
+export async function fetchServoStatus(): Promise<ServoStatus> {
+  const r = await fetch(`${API}/servo/status`);
+  if (!r.ok) throw new Error("Servo-Status laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function fetchServoConfig(): Promise<ServoConfig> {
+  const r = await fetch(`${API}/config/servo`);
+  if (!r.ok) throw new Error("Servo-Konfiguration laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function startServoTest(angles: ServoAngles): Promise<ServoStatus> {
+  const r = await fetch(`${API}/servo/test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(angles),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Servo-Test starten fehlgeschlagen");
+  }
+  return r.json();
+}
+
+export async function startServoHome(): Promise<ServoStatus> {
+  const r = await fetch(`${API}/servo/home`, { method: "POST" });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Grundstellung anfahren fehlgeschlagen");
+  }
   return r.json();
 }
 
