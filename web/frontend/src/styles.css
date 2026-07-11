@@ -286,10 +286,20 @@ button {
 
 .drive-layout {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 1.5rem;
   align-items: flex-start;
   margin-bottom: 1rem;
+}
+
+/* Steuerpad behält seine Größe, die beiden Vorschaubilder teilen sich den Rest */
+.drive-layout > .drive-controls {
+  flex: 0 0 auto;
+}
+
+.drive-layout > .drive-preview {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .drive-preview h2 {
