@@ -23,6 +23,7 @@ echo "==> Installing Maehbot into venv..."
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install -e .
+# Optional training/video: pip install -r requirements-training.txt
 
 echo "Setup complete."
 echo "  Activate:  source $ROOT/.venv/bin/activate"

@@ -244,6 +244,7 @@ button {
 .live-viewport {
   margin-top: 1rem;
   min-height: 180px;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -332,6 +333,21 @@ button {
 
 .spray-camera-panel {
   margin-top: 0.5rem;
+}
+
+.spray-preview-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.live-viewport {
+  position: relative;
 }
 
 .servo-hold-wrap {

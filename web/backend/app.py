@@ -367,9 +367,22 @@ def get_vision_camera_preview(
     _user: str | None = Depends(auth_dependency),
 ) -> Response:
     """Spray/vision-node camera (preview_vision.jpg on the vision Pi)."""
-    path = state["paths"].vision_preview_path
+    paths = state["paths"]
+    path = paths.vision_preview_path
     if not path.exists():
+        path = paths.preview_path
+    if not path.exists():
+        # region agent log
+        logger.warning(
+            "vision preview missing: %s and %s",
+            paths.vision_preview_path,
+            paths.preview_path,
+        )
+        # endregion
         raise HTTPException(status_code=404, detail="Vision-Kameravorschau noch nicht verfügbar")
+    # region agent log
+    logger.debug("Serving vision preview from %s", path)
+    # endregion
     return FileResponse(
         path,
         media_type="image/jpeg",

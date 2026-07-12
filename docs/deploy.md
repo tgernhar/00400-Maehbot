@@ -68,6 +68,8 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+`requirements.txt` enthält Core + Web (ohne OpenCV). OpenCV nur für Video-Upload/Training: `pip install -r requirements-training.txt`. Tests: `pip install -r requirements-dev.txt`.
+
 Do **not** run `pip install` without activating `.venv` first.
 Do **not** use shell syntax like `pip install ... + picamera2`; use apt for Pi camera/GPIO packages.
 

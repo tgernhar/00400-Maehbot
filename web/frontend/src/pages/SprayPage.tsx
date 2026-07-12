@@ -55,7 +55,7 @@ export default function SprayPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [previewTick, setPreviewTick] = useState(0);
-  const [previewAvailable, setPreviewAvailable] = useState(true);
+  const [previewError, setPreviewError] = useState(false);
   const busy = status != null && status.state !== "idle";
   const coreOnline = coreReachable(status);
 
@@ -200,17 +200,18 @@ export default function SprayPage() {
           Livebild vom Core — zur Kontrolle der Düsenausrichtung während der Servo-Tests.
         </p>
         <div className="live-viewport">
-          {previewAvailable ? (
-            <img
-              src={visionCameraPreviewUrl(previewTick)}
-              alt="Kameravorschau"
-              className="camera-preview"
-              onLoad={() => setPreviewAvailable(true)}
-              onError={() => setPreviewAvailable(false)}
-            />
-          ) : (
-            <p className="muted live-placeholder">
-              Kameravorschau nicht verfügbar — Core läuft mit Picamera2?
+          <img
+            src={visionCameraPreviewUrl(previewTick)}
+            alt="Kameravorschau"
+            className="camera-preview"
+            style={{ opacity: previewError ? 0.35 : 1 }}
+            onLoad={() => setPreviewError(false)}
+            onError={() => setPreviewError(true)}
+          />
+          {previewError && (
+            <p className="muted live-placeholder spray-preview-hint">
+              Kameravorschau nicht verfügbar — Core läuft? Endpoint{" "}
+              <code>/api/camera/preview/vision</code>
             </p>
           )}
         </div>

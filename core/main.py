@@ -248,6 +248,8 @@ class CoreApplication:
         if frame.data and now - self._last_preview_write >= self._preview_interval_s:
             try:
                 self.paths.vision_preview_path.write_bytes(frame.data)
+                # Keep preview.jpg in sync on single-node setups / older web builds
+                self.paths.preview_path.write_bytes(frame.data)
                 self._last_preview_write = now
             except OSError:
                 logger.warning("Failed to write camera preview")

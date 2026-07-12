@@ -1,0 +1,3 @@
+# Optional: video upload / training preview (not needed for web UI or live camera)
+# On 32-bit Pi OS, use a piwheels build — avoid 5.x source fallback:
+opencv-python-headless>=4.9,<5
