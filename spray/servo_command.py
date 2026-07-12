@@ -60,9 +60,15 @@ def queue_servo_command(
 ) -> None:
     payload: dict[str, Any] = {"action": action, "ts": time.time()}
     if steps is not None:
-        payload["steps"] = [
-            {"servo": str(s["servo"]), "angle": float(s["angle"])} for s in steps
-        ]
+        payload["steps"] = []
+        for s in steps:
+            step_payload: dict[str, Any] = {
+                "servo": str(s["servo"]),
+                "angle": float(s["angle"]),
+            }
+            if "hold_until_step" in s and s["hold_until_step"] is not None:
+                step_payload["hold_until_step"] = int(s["hold_until_step"])
+            payload["steps"].append(step_payload)
     if step_index is not None:
         payload["step_index"] = int(step_index)
     if angles is not None:

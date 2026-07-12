@@ -89,6 +89,7 @@ export type ServoName = "position" | "tension" | "trigger";
 export interface ServoStep {
   servo: ServoName;
   angle: number;
+  hold_until_step?: number | null;
 }
 
 export interface ServoStatus {
@@ -105,7 +106,6 @@ export interface ServoLimit {
 
 export interface ServoConfig {
   test_sequence: ServoStep[];
-  hold_until_step: Record<ServoName, number | null>;
   limits: Record<ServoName, ServoLimit>;
 }
 
@@ -268,14 +268,11 @@ export async function fetchServoConfig(): Promise<ServoConfig> {
   return r.json();
 }
 
-export async function startServoTest(
-  steps: ServoStep[],
-  holdUntilStep: Record<ServoName, number | null>
-): Promise<ServoStatus> {
+export async function startServoTest(steps: ServoStep[]): Promise<ServoStatus> {
   const r = await fetch(`${API}/servo/test`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ steps, hold_until_step: holdUntilStep }),
+    body: JSON.stringify({ steps }),
   });
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));

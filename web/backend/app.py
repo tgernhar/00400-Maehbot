@@ -35,7 +35,15 @@ except ImportError:
             for item in raw:
                 name = str(item.get("servo", ""))
                 if name in SERVO_NAMES:
-                    steps.append({"servo": name, "angle": float(item.get("angle", 0.0))})
+                    hold = item.get("hold_until_step")
+                    hold_val = int(hold) if hold not in (None, "") else None
+                    steps.append(
+                        {
+                            "servo": name,
+                            "angle": float(item.get("angle", 0.0)),
+                            "hold_until_step": hold_val,
+                        }
+                    )
             if steps:
                 return steps
         angles = servo_cfg.get("test_angles", {}) or {}
@@ -492,10 +500,13 @@ def _servo_config_out(config: dict[str, Any]) -> ServoConfigOut:
     limits = servo_limits(servo_cfg)
     return ServoConfigOut(
         test_sequence=[
-            ServoStepOut(servo=s["servo"], angle=s["angle"])
+            ServoStepOut(
+                servo=s["servo"],
+                angle=s["angle"],
+                hold_until_step=s.get("hold_until_step"),
+            )
             for s in sequence_steps_from_config(servo_cfg)
         ],
-        hold_until_step=hold_until_from_config(servo_cfg),
         limits={
             name: ServoLimitOut(min_angle=lo, max_angle=hi)
             for name, (lo, hi) in limits.items()
@@ -503,45 +514,31 @@ def _servo_config_out(config: dict[str, Any]) -> ServoConfigOut:
     )
 
 
-def _validate_hold_until_step(
-    steps: list[dict[str, Any]],
-    hold_until: dict[str, int | None] | None,
-) -> dict[str, int | None]:
-    holds = hold_until_from_config({"hold_until_step": hold_until or {}})
-    if not hold_until:
-        return holds
-    total = len(steps)
-    for name, value in hold_until.items():
-        if name not in SERVO_NAMES:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Unbekannter Servo '{name}' in hold_until_step",
-            )
-        if value is None:
-            holds[name] = None
-            continue
-        if value < 1 or value > total:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Halten-bis-Schritt für '{name}' muss zwischen 1 und {total} liegen",
-            )
-        first_idx = next(
-            (i + 1 for i, s in enumerate(steps) if s["servo"] == name),
-            None,
+def _validate_step_hold(
+    step_index: int,
+    hold_until: int | None,
+    total_steps: int,
+) -> int | None:
+    if hold_until is None:
+        return None
+    if hold_until < step_index or hold_until > total_steps:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Halten-bis-Schritt in Schritt {step_index} muss zwischen "
+                f"{step_index} und {total_steps} liegen"
+            ),
         )
-        if first_idx is not None and value < first_idx:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"Halten-bis-Schritt für '{name}' muss mindestens {first_idx} sein "
-                    f"(erster Schritt mit diesem Servo)"
-                ),
-            )
-        holds[name] = int(value)
-    return holds
+    return int(hold_until)
 
 
-def _validate_servo_step(step: ServoStepIn, config: dict[str, Any]) -> dict[str, Any]:
+def _validate_servo_step(
+    step: ServoStepIn,
+    config: dict[str, Any],
+    *,
+    step_index: int | None = None,
+    total_steps: int | None = None,
+) -> dict[str, Any]:
     limits = servo_limits(config.get("servo", {}))
     name = step.servo
     if name not in SERVO_NAMES:
@@ -555,7 +552,14 @@ def _validate_servo_step(step: ServoStepIn, config: dict[str, Any]) -> dict[str,
             status_code=422,
             detail=f"Winkel für Servo '{name}' muss zwischen {lo:g}° und {hi:g}° liegen",
         )
-    return {"servo": name, "angle": float(step.angle)}
+    hold = step.hold_until_step
+    if hold is not None and step_index is not None and total_steps is not None:
+        hold = _validate_step_hold(step_index, hold, total_steps)
+    return {
+        "servo": name,
+        "angle": float(step.angle),
+        "hold_until_step": hold,
+    }
 
 
 @app.get("/api/servo/status", response_model=ServoStatusOut)
@@ -578,13 +582,17 @@ def post_servo_test(
     _user: str | None = Depends(auth_dependency),
 ) -> ServoStatusOut:
     steps: list[dict[str, Any]] = []
-    for step in body.steps:
-        steps.append(_validate_servo_step(step, state["config"]))
-    holds = _validate_hold_until_step(steps, body.hold_until_step)
+    total = len(body.steps)
+    for idx, step in enumerate(body.steps, start=1):
+        steps.append(
+            _validate_servo_step(
+                step, state["config"], step_index=idx, total_steps=total
+            )
+        )
     current = read_servo_status(state["paths"])
     if current.get("state") not in (None, "idle"):
         raise HTTPException(status_code=409, detail="Servo-Sequenz läuft bereits")
-    save_local_config({"servo": {"test_sequence": steps, "hold_until_step": holds}})
+    save_local_config({"servo": {"test_sequence": steps}})
     reload_config(state)
     queue_servo_command(state["paths"], "test", steps=steps)
     return ServoStatusOut(**read_servo_status(state["paths"]))
@@ -596,17 +604,17 @@ def post_servo_step(
     state: dict[str, Any] = Depends(get_app_state),
     _user: str | None = Depends(auth_dependency),
 ) -> ServoStatusOut:
-    step = _validate_servo_step(body, state["config"])
-    holds = hold_until_from_config(state["config"].get("servo", {}))
-    hold_val = holds.get(step["servo"])
-    if hold_val is not None and hold_val < body.step_index:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Halten-bis-Schritt für '{step['servo']}' muss mindestens "
-                f"{body.step_index} sein"
-            ),
-        )
+    servo_cfg = state["config"].get("servo", {})
+    total_steps = max(
+        len(sequence_steps_from_config(servo_cfg)),
+        body.step_index,
+    )
+    step = _validate_servo_step(
+        body,
+        state["config"],
+        step_index=body.step_index,
+        total_steps=total_steps,
+    )
     current = read_servo_status(state["paths"])
     if current.get("state") not in (None, "idle"):
         raise HTTPException(status_code=409, detail="Servo-Sequenz läuft bereits")

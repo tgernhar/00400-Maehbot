@@ -73,6 +73,11 @@ class DriveConfigOut(BaseModel):
 class ServoStepIn(BaseModel):
     servo: str
     angle: float
+    hold_until_step: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional 1-based step until which this servo stays active after the move",
+    )
 
 
 class ServoStepRunIn(ServoStepIn):
@@ -81,7 +86,6 @@ class ServoStepRunIn(ServoStepIn):
 
 class ServoTestIn(BaseModel):
     steps: list[ServoStepIn] = Field(min_length=1)
-    hold_until_step: dict[str, int | None] | None = None
 
 
 class ServoStatusOut(BaseModel):
@@ -99,11 +103,11 @@ class ServoLimitOut(BaseModel):
 class ServoStepOut(BaseModel):
     servo: str
     angle: float
+    hold_until_step: int | None = None
 
 
 class ServoConfigOut(BaseModel):
     test_sequence: list[ServoStepOut]
-    hold_until_step: dict[str, int | None]
     limits: dict[str, ServoLimitOut]
 
 

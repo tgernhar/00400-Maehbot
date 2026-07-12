@@ -68,6 +68,30 @@ def default_test_sequence(test_angles: dict[str, Any] | None = None) -> list[tup
     ] + home_sequence_steps()
 
 
+def _step_hold_value(raw: Any) -> int | None:
+    if raw is None or raw == "":
+        return None
+    return int(raw)
+
+
+def _apply_legacy_hold_until(
+    steps: list[dict[str, Any]], servo_cfg: dict[str, Any]
+) -> None:
+    """Map legacy per-servo hold_until_step onto the first step of each servo."""
+    legacy = hold_until_from_config(servo_cfg)
+    first_index: dict[str, int] = {}
+    for idx, step in enumerate(steps):
+        name = step["servo"]
+        if name not in first_index:
+            first_index[name] = idx
+    for idx, step in enumerate(steps):
+        if step.get("hold_until_step") is not None:
+            continue
+        name = step["servo"]
+        if idx == first_index.get(name):
+            step["hold_until_step"] = legacy.get(name)
+
+
 def sequence_steps_from_config(servo_cfg: dict[str, Any]) -> list[dict[str, Any]]:
     """Editable test steps from config; falls back to legacy test_angles."""
     raw = servo_cfg.get("test_sequence")
@@ -76,13 +100,22 @@ def sequence_steps_from_config(servo_cfg: dict[str, Any]) -> list[dict[str, Any]
         for item in raw:
             name = str(item.get("servo", ""))
             if name in SERVO_NAMES:
-                steps.append({"servo": name, "angle": float(item.get("angle", 0.0))})
+                steps.append(
+                    {
+                        "servo": name,
+                        "angle": float(item.get("angle", 0.0)),
+                        "hold_until_step": _step_hold_value(item.get("hold_until_step")),
+                    }
+                )
         if steps:
+            _apply_legacy_hold_until(steps, servo_cfg)
             return steps
-    return [
-        {"servo": name, "angle": angle}
+    steps = [
+        {"servo": name, "angle": angle, "hold_until_step": None}
         for name, angle in default_test_sequence(servo_cfg.get("test_angles"))
     ]
+    _apply_legacy_hold_until(steps, servo_cfg)
+    return steps
 
 
 def hold_until_from_config(servo_cfg: dict[str, Any]) -> dict[str, int | None]:
@@ -255,14 +288,26 @@ class ServoSequencer:
         )
 
     def run_sequence(
-        self, steps: list[tuple[str, float]], start_index: int = 1
+        self,
+        steps: list[tuple[str, float] | tuple[str, float, int | None] | dict[str, Any]],
+        start_index: int = 1,
     ) -> bool:
         """Run a custom step list. False when busy or an unknown servo is given."""
-        parsed: list[tuple[str, float]] = []
-        for name, angle in steps:
+        parsed: list[tuple[str, float, int | None]] = []
+        for item in steps:
+            if isinstance(item, dict):
+                name = str(item["servo"])
+                angle = float(item["angle"])
+                hold = _step_hold_value(item.get("hold_until_step"))
+            elif len(item) == 3:
+                name, angle, hold = item
+                hold = _step_hold_value(hold)
+            else:
+                name, angle = item
+                hold = None
             if name not in self.channels:
                 return False
-            parsed.append((name, self.channels[name].clamp(angle)))
+            parsed.append((name, self.channels[name].clamp(angle), hold))
         return self._start("testing", parsed, start_index=start_index)
 
     def run_sweep(self, servo_name: str) -> bool:
@@ -273,7 +318,9 @@ class ServoSequencer:
         """
         if servo_name not in self.channels:
             return False
-        steps = [(servo_name, angle) for angle in self._sweep_angles(servo_name)]
+        steps = [
+            (servo_name, angle, None) for angle in self._sweep_angles(servo_name)
+        ]
         return self._start("sweeping", steps)
 
     @staticmethod
@@ -303,13 +350,13 @@ class ServoSequencer:
         if thread and thread.is_alive():
             thread.join(timeout=10.0)
 
-    def _home_steps(self) -> list[tuple[str, float]]:
-        return home_sequence_steps()
+    def _home_steps(self) -> list[tuple[str, float, int | None]]:
+        return [(name, angle, None) for name, angle in home_sequence_steps()]
 
     def _start(
         self,
         state: str,
-        steps: list[tuple[str, float]],
+        steps: list[tuple[str, float, int | None]],
         *,
         start_index: int = 1,
         apply_holds: bool = True,
@@ -336,7 +383,7 @@ class ServoSequencer:
 
     def _execute(
         self,
-        steps: list[tuple[str, float]],
+        steps: list[tuple[str, float, int | None]],
         *,
         start_index: int = 1,
         apply_holds: bool = True,
@@ -344,7 +391,7 @@ class ServoSequencer:
         error: str | None = None
         holds: dict[str, int] = {}
         try:
-            for offset, (name, angle) in enumerate(steps):
+            for offset, (name, angle, hold_cfg) in enumerate(steps):
                 step_idx = start_index + offset
                 moved = self.channels[name].move_to(angle)
                 self.move_log.append((name, moved))
@@ -352,7 +399,6 @@ class ServoSequencer:
                 if not self.release_when_idle:
                     continue
                 if apply_holds:
-                    hold_cfg = self.hold_until_step.get(name)
                     if hold_cfg is not None and hold_cfg >= step_idx:
                         holds[name] = hold_cfg
                     elif name not in holds:

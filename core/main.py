@@ -302,10 +302,7 @@ class CoreApplication:
             elif action == "test":
                 steps_raw = command.get("steps")
                 if steps_raw:
-                    steps = [
-                        (str(s["servo"]), float(s["angle"])) for s in steps_raw
-                    ]
-                    started = self.servo_sequencer.run_sequence(steps)
+                    started = self.servo_sequencer.run_sequence(steps_raw)
                 else:
                     angles = command.get("angles", {}) or {}
                     started = self.servo_sequencer.run_test(
@@ -319,7 +316,7 @@ class CoreApplication:
                     s = steps_raw[0]
                     step_index = int(command.get("step_index", 1))
                     started = self.servo_sequencer.run_sequence(
-                        [(str(s["servo"]), float(s["angle"]))],
+                        [s],
                         start_index=step_index,
                     )
                 else:

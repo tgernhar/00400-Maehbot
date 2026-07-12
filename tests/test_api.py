@@ -71,7 +71,7 @@ def test_servo_config_get(client):
     assert r.status_code == 200
     data = r.json()
     assert len(data["test_sequence"]) >= 1
-    assert "hold_until_step" in data
+    assert "hold_until_step" in data["test_sequence"][0]
     assert data["limits"]["trigger"]["max_angle"] == 45
 
 

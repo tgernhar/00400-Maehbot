@@ -159,16 +159,16 @@ class TestServoSequencer:
             ]
         }
         assert sequence_steps_from_config(cfg) == [
-            {"servo": "position", "angle": 10.0},
-            {"servo": "trigger", "angle": 5.0},
+            {"servo": "position", "angle": 10.0, "hold_until_step": None},
+            {"servo": "trigger", "angle": 5.0, "hold_until_step": None},
         ]
 
     def test_sequence_steps_fallback_from_test_angles(self) -> None:
         steps = sequence_steps_from_config({"test_angles": {"position": 90, "tension": 30, "trigger": 15}})
         assert len(steps) == 8
-        assert steps[0] == {"servo": "tension", "angle": 30.0}
-        assert steps[1] == {"servo": "position", "angle": 90.0}
-        assert steps[2] == {"servo": "trigger", "angle": 15.0}
+        assert steps[0] == {"servo": "tension", "angle": 30.0, "hold_until_step": None}
+        assert steps[1] == {"servo": "position", "angle": 90.0, "hold_until_step": None}
+        assert steps[2] == {"servo": "trigger", "angle": 15.0, "hold_until_step": None}
 
     def test_default_test_sequence(self) -> None:
         names = [n for n, _ in default_test_sequence({"position": 1, "tension": 2, "trigger": 3})]
@@ -222,13 +222,9 @@ class TestServoSequencer:
 
     def test_hold_until_step_keeps_pwm_between_steps(self) -> None:
         gpio = MockGPIO()
-        cfg = {
-            **SERVO_CFG,
-            "hold_until_step": {"tension": 2, "position": None, "trigger": None},
-        }
-        seq = ServoSequencer(gpio, cfg, sleep_fn=lambda _s: None)
+        seq = ServoSequencer(gpio, SERVO_CFG, sleep_fn=lambda _s: None)
         seq.setup()
-        assert seq.run_sequence([("tension", 10.0), ("position", 20.0)])
+        assert seq.run_sequence([("tension", 10.0, 2), ("position", 20.0, None)])
         seq.wait_idle()
         # tension: move, no release after step 1 (hold until 2), release after step 2
         # position: move, release after step 2
