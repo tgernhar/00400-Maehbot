@@ -211,6 +211,15 @@ class TestServoSequencer:
         seq.wait_idle()
         assert any(duty == -1.0 for _pin, duty in gpio.pwm_log)
 
+    def test_release_pwm_after_single_step(self) -> None:
+        gpio = MockGPIO()
+        seq = ServoSequencer(gpio, SERVO_CFG, sleep_fn=lambda _s: None)
+        seq.setup()
+        assert seq.run_sequence([("position", 45.0)])
+        seq.wait_idle()
+        stops = [pin for pin, duty in gpio.pwm_log if duty == -1.0]
+        assert 18 in stops
+
 
 class TestServoCommandIpc:
     def test_queue_and_consume(self, tmp_path) -> None:

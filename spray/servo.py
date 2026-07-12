@@ -311,14 +311,12 @@ class ServoSequencer:
     def _execute(self, steps: list[tuple[str, float]]) -> None:
         error: str | None = None
         try:
-            for i, (name, angle) in enumerate(steps):
+            for name, angle in steps:
                 moved = self.channels[name].move_to(angle)
                 self.move_log.append((name, moved))
-                if i < len(steps) - 1:
-                    self._sleep(self.step_delay_s)
-            # Let the final position settle before cutting PWM
-            if steps:
                 self._sleep(self.step_delay_s)
+                if self.release_when_idle:
+                    self.channels[name].release()
         except Exception as exc:
             logger.exception("Servo sequence failed")
             error = str(exc)

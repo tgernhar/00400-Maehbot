@@ -174,8 +174,12 @@ class LgpioGPIO(GPIOBackend):
         self._lgpio.tx_pwm(self._chip, pin, freq, duty)
 
     def stop_pwm(self, pin: int) -> None:
-        # lgpio: frequency 0 disables PWM on the GPIO
+        # lgpio: frequency 0 disables PWM; tx_pulse(0,0) clears active/queued pulses
         self._lgpio.tx_pwm(self._chip, pin, 0, 0)
+        try:
+            self._lgpio.tx_pulse(self._chip, pin, 0, 0)
+        except Exception:
+            pass
 
     def close(self) -> None:
         freed = sorted(self._claimed)
