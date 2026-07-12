@@ -299,15 +299,31 @@ class CoreApplication:
             if action == "home":
                 started = self.servo_sequencer.run_home()
             elif action == "test":
-                angles = command.get("angles", {}) or {}
-                started = self.servo_sequencer.run_test(
-                    position=float(angles.get("position", 0.0)),
-                    tension=float(angles.get("tension", 0.0)),
-                    trigger=float(angles.get("trigger", 0.0)),
-                )
+                steps_raw = command.get("steps")
+                if steps_raw:
+                    steps = [
+                        (str(s["servo"]), float(s["angle"])) for s in steps_raw
+                    ]
+                    started = self.servo_sequencer.run_sequence(steps)
+                else:
+                    angles = command.get("angles", {}) or {}
+                    started = self.servo_sequencer.run_test(
+                        position=float(angles.get("position", 0.0)),
+                        tension=float(angles.get("tension", 0.0)),
+                        trigger=float(angles.get("trigger", 0.0)),
+                    )
+            elif action == "step":
+                steps_raw = command.get("steps") or []
+                if len(steps_raw) == 1:
+                    s = steps_raw[0]
+                    started = self.servo_sequencer.run_sequence(
+                        [(str(s["servo"]), float(s["angle"]))]
+                    )
+                else:
+                    logger.warning("Servo step command needs exactly one step")
             else:
                 logger.warning("Unknown servo action: %s", action)
-            if action in ("home", "test") and not started:
+            if action in ("home", "test", "step") and not started:
                 logger.warning("Servo command rejected (sequence busy): %s", action)
                 status = self.servo_sequencer.status_dict()
                 status["error"] = "Sequenz läuft bereits"

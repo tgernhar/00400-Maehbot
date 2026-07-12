@@ -7,7 +7,14 @@ import threading
 import pytest
 
 from spray.gpio import MockGPIO
-from spray.servo import ServoChannel, ServoSequencer, build_servo_channels, servo_limits
+from spray.servo import (
+    ServoChannel,
+    ServoSequencer,
+    build_servo_channels,
+    default_test_sequence,
+    servo_limits,
+    sequence_steps_from_config,
+)
 from spray.servo_command import (
     consume_servo_command,
     default_servo_status,
@@ -133,6 +140,43 @@ class TestServoSequencer:
         assert seq.move_log[1] == ("position", 180.0)
         assert seq.move_log[2] == ("trigger", 45.0)
 
+    def test_run_sequence_custom(self) -> None:
+        seq = self.make_sequencer()
+        custom = [("position", 45.0), ("trigger", 10.0)]
+        assert seq.run_sequence(custom)
+        seq.wait_idle()
+        assert seq.move_log == custom
+
+    def test_run_sequence_rejects_unknown_servo(self) -> None:
+        seq = self.make_sequencer()
+        assert not seq.run_sequence([("unknown", 0.0)])
+
+    def test_sequence_steps_from_config(self) -> None:
+        cfg = {
+            "test_sequence": [
+                {"servo": "position", "angle": 10},
+                {"servo": "trigger", "angle": 5},
+            ]
+        }
+        assert sequence_steps_from_config(cfg) == [
+            {"servo": "position", "angle": 10.0},
+            {"servo": "trigger", "angle": 5.0},
+        ]
+
+    def test_sequence_steps_fallback_from_test_angles(self) -> None:
+        steps = sequence_steps_from_config({"test_angles": {"position": 90, "tension": 30, "trigger": 15}})
+        assert len(steps) == 8
+        assert steps[0] == {"servo": "tension", "angle": 30.0}
+        assert steps[1] == {"servo": "position", "angle": 90.0}
+        assert steps[2] == {"servo": "trigger", "angle": 15.0}
+
+    def test_default_test_sequence(self) -> None:
+        names = [n for n, _ in default_test_sequence({"position": 1, "tension": 2, "trigger": 3})]
+        assert names == [
+            "tension", "position", "trigger",
+            "trigger", "tension", "position", "tension", "trigger",
+        ]
+
     def test_rejects_while_busy(self) -> None:
         # Block the worker thread inside the sequence to keep it busy
         release = threading.Event()
@@ -172,12 +216,20 @@ class TestServoCommandIpc:
     def test_queue_and_consume(self, tmp_path) -> None:
         paths = StoragePaths(tmp_path)
         queue_servo_command(
-            paths, "test", {"position": 10, "tension": 20, "trigger": 30}
+            paths,
+            "test",
+            steps=[
+                {"servo": "position", "angle": 10},
+                {"servo": "tension", "angle": 20},
+            ],
         )
         cmd = consume_servo_command(paths)
         assert cmd is not None
         assert cmd["action"] == "test"
-        assert cmd["angles"] == {"position": 10.0, "tension": 20.0, "trigger": 30.0}
+        assert cmd["steps"] == [
+            {"servo": "position", "angle": 10.0},
+            {"servo": "tension", "angle": 20.0},
+        ]
         # consumed: file removed
         assert consume_servo_command(paths) is None
 

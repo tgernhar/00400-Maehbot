@@ -70,7 +70,7 @@ def test_servo_config_get(client):
     r = client.get("/api/config/servo")
     assert r.status_code == 200
     data = r.json()
-    assert "position" in data["test_angles"]
+    assert len(data["test_sequence"]) >= 1
     assert data["limits"]["trigger"]["max_angle"] == 45
 
 
@@ -84,27 +84,57 @@ def test_servo_test_queues_command(client, monkeypatch):
     from spray.servo_command import consume_servo_command
     import web.backend.app as m
 
-    # Keep persisted slider values out of the real config/local.yaml
+    # Keep persisted sequence out of the real config/local.yaml
     monkeypatch.setattr(m, "save_local_config", lambda updates: None)
     monkeypatch.setattr(m, "reload_config", lambda state: state["config"])
 
     state = app.dependency_overrides[get_app_state]()
     paths = state["paths"]
-    r = client.post(
-        "/api/servo/test",
-        json={"position": 90, "tension": 120, "trigger": 30},
-    )
+    steps = [
+        {"servo": "tension", "angle": 120},
+        {"servo": "position", "angle": 90},
+        {"servo": "trigger", "angle": 30},
+    ]
+    r = client.post("/api/servo/test", json={"steps": steps})
     assert r.status_code == 200
     cmd = consume_servo_command(paths)
     assert cmd is not None
     assert cmd["action"] == "test"
-    assert cmd["angles"] == {"position": 90.0, "tension": 120.0, "trigger": 30.0}
+    assert cmd["steps"] == [
+        {"servo": "tension", "angle": 120.0},
+        {"servo": "position", "angle": 90.0},
+        {"servo": "trigger", "angle": 30.0},
+    ]
 
 
 def test_servo_test_rejects_out_of_range(client):
     r = client.post(
         "/api/servo/test",
-        json={"position": 0, "tension": 0, "trigger": 90},
+        json={"steps": [{"servo": "trigger", "angle": 90}]},
+    )
+    assert r.status_code == 422
+
+
+def test_servo_step_queues_command(client):
+    from spray.servo_command import consume_servo_command
+
+    state = app.dependency_overrides[get_app_state]()
+    paths = state["paths"]
+    r = client.post(
+        "/api/servo/step",
+        json={"servo": "position", "angle": 45},
+    )
+    assert r.status_code == 200
+    cmd = consume_servo_command(paths)
+    assert cmd is not None
+    assert cmd["action"] == "step"
+    assert cmd["steps"] == [{"servo": "position", "angle": 45.0}]
+
+
+def test_servo_step_rejects_out_of_range(client):
+    r = client.post(
+        "/api/servo/step",
+        json={"servo": "trigger", "angle": 90},
     )
     assert r.status_code == 422
 

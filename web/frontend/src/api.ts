@@ -84,10 +84,11 @@ export interface CoverageConfig {
   max_avoid_attempts: number;
 }
 
-export interface ServoAngles {
-  position: number;
-  tension: number;
-  trigger: number;
+export type ServoName = "position" | "tension" | "trigger";
+
+export interface ServoStep {
+  servo: ServoName;
+  angle: number;
 }
 
 export interface ServoStatus {
@@ -103,8 +104,8 @@ export interface ServoLimit {
 }
 
 export interface ServoConfig {
-  test_angles: ServoAngles;
-  limits: Record<keyof ServoAngles, ServoLimit>;
+  test_sequence: ServoStep[];
+  limits: Record<ServoName, ServoLimit>;
 }
 
 export interface TrainingSession {
@@ -266,15 +267,28 @@ export async function fetchServoConfig(): Promise<ServoConfig> {
   return r.json();
 }
 
-export async function startServoTest(angles: ServoAngles): Promise<ServoStatus> {
+export async function startServoTest(steps: ServoStep[]): Promise<ServoStatus> {
   const r = await fetch(`${API}/servo/test`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(angles),
+    body: JSON.stringify({ steps }),
   });
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
     throw new Error(data.detail ?? "Servo-Test starten fehlgeschlagen");
+  }
+  return r.json();
+}
+
+export async function startServoStep(step: ServoStep): Promise<ServoStatus> {
+  const r = await fetch(`${API}/servo/step`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(step),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Servo-Schritt starten fehlgeschlagen");
   }
   return r.json();
 }

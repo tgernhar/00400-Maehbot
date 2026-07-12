@@ -326,6 +326,67 @@ button {
   margin-top: 0.5rem;
 }
 
+.servo-sequence-wrap {
+  margin: 1rem 0;
+}
+
+.servo-sequence-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #141a22;
+  border: 1px solid #333;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.servo-sequence-table th,
+.servo-sequence-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #2a3340;
+  vertical-align: middle;
+}
+
+.servo-sequence-table th {
+  background: #1a222c;
+  font-weight: 600;
+}
+
+.servo-sequence-table tr:last-child td {
+  border-bottom: none;
+}
+
+.servo-sequence-table select,
+.servo-sequence-table input[type="number"] {
+  padding: 0.4rem;
+  min-width: 80px;
+}
+
+.servo-sequence-table select {
+  min-width: 220px;
+}
+
+.servo-step-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.servo-step-actions {
+  display: flex;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.servo-step-remove {
+  min-width: 2rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.servo-step-add {
+  margin-top: 0.75rem;
+}
+
 .drive-status-row {
   display: flex;
   flex-wrap: wrap;

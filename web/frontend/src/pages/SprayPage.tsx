@@ -2,29 +2,19 @@ import { useEffect, useState } from "react";
 import {
   fetchServoConfig,
   fetchServoStatus,
-  ServoAngles,
   ServoConfig,
+  ServoName,
   ServoStatus,
+  ServoStep,
   startServoHome,
+  startServoStep,
   startServoTest,
 } from "../api";
 
-const SERVOS: { key: keyof ServoAngles; label: string; description: string }[] = [
-  {
-    key: "position",
-    label: "Servo 1 – Positionierung",
-    description: "Drehwinkel der Düse",
-  },
-  {
-    key: "tension",
-    label: "Servo 2 – Spannservo",
-    description: "Druck für das Sprühen",
-  },
-  {
-    key: "trigger",
-    label: "Servo 3 – Betätigung",
-    description: "Auslösemechanismus",
-  },
+const SERVO_OPTIONS: { key: ServoName; label: string }[] = [
+  { key: "position", label: "Servo 1 – Positionierung" },
+  { key: "tension", label: "Servo 2 – Spannservo" },
+  { key: "trigger", label: "Servo 3 – Betätigung" },
 ];
 
 const STATE_LABELS: Record<string, string> = {
@@ -41,9 +31,13 @@ function coreReachable(status: ServoStatus | null): boolean {
   return Date.now() / 1000 - status.updated_at < CORE_STALE_SECONDS;
 }
 
+function cloneSteps(steps: ServoStep[]): ServoStep[] {
+  return steps.map((s) => ({ ...s }));
+}
+
 export default function SprayPage() {
   const [config, setConfig] = useState<ServoConfig | null>(null);
-  const [angles, setAngles] = useState<ServoAngles | null>(null);
+  const [steps, setSteps] = useState<ServoStep[] | null>(null);
   const [status, setStatus] = useState<ServoStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -54,7 +48,7 @@ export default function SprayPage() {
     fetchServoConfig()
       .then((cfg) => {
         setConfig(cfg);
-        setAngles(cfg.test_angles);
+        setSteps(cloneSteps(cfg.test_sequence));
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Fehler"));
   }, []);
@@ -76,12 +70,40 @@ export default function SprayPage() {
     };
   }, []);
 
-  async function onTest() {
-    if (!angles) return;
+  function updateStep(index: number, patch: Partial<ServoStep>) {
+    if (!steps) return;
+    setSteps(steps.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }
+
+  function addStep() {
+    if (!steps) return;
+    setSteps([...steps, { servo: "position", angle: 0 }]);
+  }
+
+  function removeStep(index: number) {
+    if (!steps || steps.length <= 1) return;
+    setSteps(steps.filter((_, i) => i !== index));
+  }
+
+  async function onTestStep(index: number) {
+    if (!steps) return;
     setError(null);
     setMessage(null);
     try {
-      setStatus(await startServoTest(angles));
+      setStatus(await startServoStep(steps[index]));
+      setMessage(`Schritt ${index + 1} gestartet`);
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fehler");
+    }
+  }
+
+  async function onTest() {
+    if (!steps) return;
+    setError(null);
+    setMessage(null);
+    try {
+      setStatus(await startServoTest(steps));
       setMessage("Testlauf gestartet");
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
@@ -101,7 +123,7 @@ export default function SprayPage() {
     }
   }
 
-  if (!config || !angles) {
+  if (!config || !steps) {
     return (
       <div>
         <h1>Sprühen</h1>
@@ -114,8 +136,9 @@ export default function SprayPage() {
     <div>
       <h1>Sprühen</h1>
       <p className="muted">
-        Servo-Testlauf: Der Ablauf fährt zuerst die eingestellten Winkel an und
-        kehrt danach automatisch in die Grundstellung zurück.
+        Testablauf: Jeder Schritt fährt einen Servo auf den Verfahrwert. Mit
+        „Testen“ in der Zeile wird nur dieser Schritt ausgeführt; der Button
+        unten startet die gesamte Sequenz und speichert sie.
       </p>
       {status && (
         <p className={busy ? "warn" : "ok"}>
@@ -131,49 +154,88 @@ export default function SprayPage() {
       {status?.error && <p className="error">{status.error}</p>}
       {message && <p className="ok">{message}</p>}
       {error && <p className="error">{error}</p>}
-      <div className="servo-grid">
-        {SERVOS.map(({ key, label, description }) => {
-          const limit = config.limits[key];
-          const current = status?.angles?.[key];
-          return (
-            <div className="servo-card" key={key}>
-              <h2>{label}</h2>
-              <p className="muted">{description}</p>
-              <div className="servo-slider-row">
-                <input
-                  type="range"
-                  min={limit.min_angle}
-                  max={limit.max_angle}
-                  step={1}
-                  value={angles[key]}
-                  disabled={busy}
-                  onChange={(e) =>
-                    setAngles({ ...angles, [key]: Number(e.target.value) })
-                  }
-                />
-                <input
-                  type="number"
-                  min={limit.min_angle}
-                  max={limit.max_angle}
-                  value={angles[key]}
-                  disabled={busy}
-                  onChange={(e) =>
-                    setAngles({ ...angles, [key]: Number(e.target.value) })
-                  }
-                />
-                <span>°</span>
-              </div>
-              <p className="muted servo-range">
-                Bereich: {limit.min_angle}° bis {limit.max_angle}°
-                {current != null && ` — Aktuell: ${current}°`}
-              </p>
-            </div>
-          );
-        })}
+
+      <div className="servo-sequence-wrap">
+        <table className="servo-sequence-table">
+          <thead>
+            <tr>
+              <th>Schritt</th>
+              <th>Servo</th>
+              <th>Verfahrwert (°)</th>
+              <th>Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {steps.map((step, index) => {
+              const limit = config.limits[step.servo];
+              const current = status?.angles?.[step.servo];
+              return (
+                <tr key={index}>
+                  <td>{index + 1}</td>
+                  <td>
+                    <select
+                      value={step.servo}
+                      disabled={busy}
+                      onChange={(e) =>
+                        updateStep(index, { servo: e.target.value as ServoName })
+                      }
+                    >
+                      {SERVO_OPTIONS.map(({ key, label }) => (
+                        <option key={key} value={key}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      min={limit.min_angle}
+                      max={limit.max_angle}
+                      step={1}
+                      value={step.angle}
+                      disabled={busy}
+                      onChange={(e) =>
+                        updateStep(index, { angle: Number(e.target.value) })
+                      }
+                    />
+                    <span className="muted servo-step-hint">
+                      {limit.min_angle}° … {limit.max_angle}°
+                      {current != null && ` — aktuell ${current}°`}
+                    </span>
+                  </td>
+                  <td className="servo-step-actions">
+                    <button
+                      type="button"
+                      className="servo-step-test"
+                      disabled={busy || !coreOnline}
+                      onClick={() => onTestStep(index)}
+                    >
+                      Testen
+                    </button>
+                    <button
+                      type="button"
+                      className="servo-step-remove"
+                      disabled={busy || steps.length <= 1}
+                      onClick={() => removeStep(index)}
+                      title="Schritt entfernen"
+                    >
+                      −
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <button type="button" className="servo-step-add" disabled={busy} onClick={addStep}>
+          Schritt hinzufügen
+        </button>
       </div>
+
       <div className="servo-actions">
         <button onClick={onTest} disabled={busy || !coreOnline}>
-          Testen
+          Gesamten Ablauf testen
         </button>
         <button onClick={onHome} disabled={busy || !coreOnline}>
           Grundstellung anfahren

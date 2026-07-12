@@ -12,39 +12,55 @@ the core realtime loop never blocks on servo travel time.
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
 import time
-from pathlib import Path
 from typing import Any
 
 from spray.gpio import GPIOBackend
 
 logger = logging.getLogger(__name__)
 
-# region agent log
-def _agent_log(location: str, message: str, data: dict[str, Any], hypothesis_id: str) -> None:
-    entry = {
-        "sessionId": "0911b3",
-        "timestamp": int(time.time() * 1000),
-        "location": location,
-        "message": message,
-        "data": data,
-        "hypothesisId": hypothesis_id,
-        "runId": "pre-fix",
-    }
-    line = json.dumps(entry) + "\n"
-    for path in (Path("debug-0911b3.log"), Path(__file__).resolve().parents[1] / "debug-0911b3.log"):
-        try:
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(line)
-            return
-        except OSError:
-            continue
-# endregion
-
 SERVO_NAMES = ("position", "tension", "trigger")
+
+
+def home_sequence_steps() -> list[tuple[str, float]]:
+    """Default home sequence (Grundstellung)."""
+    return [
+        ("trigger", 0.0),
+        ("tension", -45.0),
+        ("position", 0.0),
+        ("tension", 0.0),
+        ("trigger", 0.0),
+    ]
+
+
+def default_test_sequence(test_angles: dict[str, Any] | None = None) -> list[tuple[str, float]]:
+    """Test targets followed by the home sequence."""
+    angles = test_angles or {}
+    return [
+        ("tension", float(angles.get("tension", 0.0))),
+        ("position", float(angles.get("position", 0.0))),
+        ("trigger", float(angles.get("trigger", 0.0))),
+    ] + home_sequence_steps()
+
+
+def sequence_steps_from_config(servo_cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """Editable test steps from config; falls back to legacy test_angles."""
+    raw = servo_cfg.get("test_sequence")
+    if raw:
+        steps: list[dict[str, Any]] = []
+        for item in raw:
+            name = str(item.get("servo", ""))
+            if name in SERVO_NAMES:
+                steps.append({"servo": name, "angle": float(item.get("angle", 0.0))})
+        if steps:
+            return steps
+    return [
+        {"servo": name, "angle": angle}
+        for name, angle in default_test_sequence(servo_cfg.get("test_angles"))
+    ]
+
 
 _DEFAULTS: dict[str, dict[str, float]] = {
     "position": {"pin": 18, "min_angle": -180, "max_angle": 180},
@@ -149,14 +165,6 @@ class ServoSequencer:
         self.channels = build_servo_channels(gpio, servo_cfg)
         self.step_delay_s = float(servo_cfg.get("step_delay_ms", 800)) / 1000.0
         self.release_when_idle = bool(servo_cfg.get("release_when_idle", True))
-        # region agent log
-        _agent_log(
-            "servo.py:__init__",
-            "sequencer init",
-            {"release_when_idle": self.release_when_idle},
-            "H2",
-        )
-        # endregion
         self._sleep = sleep_fn
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
@@ -194,13 +202,21 @@ class ServoSequencer:
         return self._start("homing", self._home_steps())
 
     def run_test(self, position: float, tension: float, trigger: float) -> bool:
-        """Test run with slider angles, then back to home. False when busy."""
-        steps = [
-            ("tension", tension),
-            ("position", position),
-            ("trigger", trigger),
-        ] + self._home_steps()
-        return self._start("testing", steps)
+        """Legacy test run: three targets then home. False when busy."""
+        return self.run_sequence(
+            default_test_sequence(
+                {"position": position, "tension": tension, "trigger": trigger}
+            )
+        )
+
+    def run_sequence(self, steps: list[tuple[str, float]]) -> bool:
+        """Run a custom step list. False when busy or an unknown servo is given."""
+        parsed: list[tuple[str, float]] = []
+        for name, angle in steps:
+            if name not in self.channels:
+                return False
+            parsed.append((name, self.channels[name].clamp(angle)))
+        return self._start("testing", parsed)
 
     def run_sweep(self, servo_name: str) -> bool:
         """Diagnostic sweep for one servo only (min → mid → max → neutral).
@@ -241,15 +257,7 @@ class ServoSequencer:
             thread.join(timeout=10.0)
 
     def _home_steps(self) -> list[tuple[str, float]]:
-        # 1.1 trigger to 0, 1.2 tension to -45, 1.3 position to 0,
-        # 1.4 tension to 0, 1.5 trigger to 0
-        return [
-            ("trigger", 0.0),
-            ("tension", -45.0),
-            ("position", 0.0),
-            ("tension", 0.0),
-            ("trigger", 0.0),
-        ]
+        return home_sequence_steps()
 
     def _start(self, state: str, steps: list[tuple[str, float]]) -> bool:
         with self._lock:
@@ -264,17 +272,6 @@ class ServoSequencer:
         return True
 
     def _release_all(self) -> None:
-        # region agent log
-        _agent_log(
-            "servo.py:_release_all",
-            "release_all entry",
-            {
-                "release_when_idle": self.release_when_idle,
-                "pins": [ch.pin for ch in self.channels.values()],
-            },
-            "H1",
-        )
-        # endregion
         if not self.release_when_idle:
             return
         for channel in self.channels.values():
@@ -295,14 +292,6 @@ class ServoSequencer:
             logger.exception("Servo sequence failed")
             error = str(exc)
         finally:
-            # region agent log
-            _agent_log(
-                "servo.py:_execute",
-                "sequence finally releasing",
-                {"step_count": len(steps), "error": error},
-                "H1",
-            )
-            # endregion
             self._release_all()
             with self._lock:
                 self._state = "idle"

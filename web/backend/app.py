@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from drive.command import queue_drive_command, read_drive_status
-from spray.servo import SERVO_NAMES, servo_limits
+from spray.servo import SERVO_NAMES, servo_limits, sequence_steps_from_config
 from spray.servo_command import queue_servo_command, read_servo_status
 from maehbot.config_loader import get_project_root, load_config, save_local_config
 from navigation.coverage import queue_coverage_command, read_coverage_status
@@ -58,6 +58,8 @@ from web.backend.schemas import (
     RecordingStatusOut,
     ServoConfigOut,
     ServoLimitOut,
+    ServoStepIn,
+    ServoStepOut,
     ServoStatusOut,
     ServoTestIn,
     SprayConfigIn,
@@ -455,17 +457,34 @@ def post_drive_stop(
 
 def _servo_config_out(config: dict[str, Any]) -> ServoConfigOut:
     servo_cfg = config.get("servo", {})
-    test_angles = servo_cfg.get("test_angles", {}) or {}
     limits = servo_limits(servo_cfg)
     return ServoConfigOut(
-        test_angles={
-            name: float(test_angles.get(name, 0.0)) for name in SERVO_NAMES
-        },
+        test_sequence=[
+            ServoStepOut(servo=s["servo"], angle=s["angle"])
+            for s in sequence_steps_from_config(servo_cfg)
+        ],
         limits={
             name: ServoLimitOut(min_angle=lo, max_angle=hi)
             for name, (lo, hi) in limits.items()
         },
     )
+
+
+def _validate_servo_step(step: ServoStepIn, config: dict[str, Any]) -> dict[str, Any]:
+    limits = servo_limits(config.get("servo", {}))
+    name = step.servo
+    if name not in SERVO_NAMES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unbekannter Servo '{name}'",
+        )
+    lo, hi = limits[name]
+    if not lo <= step.angle <= hi:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Winkel für Servo '{name}' muss zwischen {lo:g}° und {hi:g}° liegen",
+        )
+    return {"servo": name, "angle": float(step.angle)}
 
 
 @app.get("/api/servo/status", response_model=ServoStatusOut)
@@ -487,22 +506,29 @@ def post_servo_test(
     state: dict[str, Any] = Depends(get_app_state),
     _user: str | None = Depends(auth_dependency),
 ) -> ServoStatusOut:
-    angles = {"position": body.position, "tension": body.tension, "trigger": body.trigger}
-    limits = servo_limits(state["config"].get("servo", {}))
-    for name, angle in angles.items():
-        lo, hi = limits[name]
-        if not lo <= angle <= hi:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Winkel für Servo '{name}' muss zwischen {lo:g}° und {hi:g}° liegen",
-            )
+    steps: list[dict[str, Any]] = []
+    for step in body.steps:
+        steps.append(_validate_servo_step(step, state["config"]))
     current = read_servo_status(state["paths"])
     if current.get("state") not in (None, "idle"):
         raise HTTPException(status_code=409, detail="Servo-Sequenz läuft bereits")
-    # Persist slider values so the UI restores them after reload
-    save_local_config({"servo": {"test_angles": angles}})
+    save_local_config({"servo": {"test_sequence": steps}})
     reload_config(state)
-    queue_servo_command(state["paths"], "test", angles)
+    queue_servo_command(state["paths"], "test", steps=steps)
+    return ServoStatusOut(**read_servo_status(state["paths"]))
+
+
+@app.post("/api/servo/step", response_model=ServoStatusOut)
+def post_servo_step(
+    body: ServoStepIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> ServoStatusOut:
+    step = _validate_servo_step(body, state["config"])
+    current = read_servo_status(state["paths"])
+    if current.get("state") not in (None, "idle"):
+        raise HTTPException(status_code=409, detail="Servo-Sequenz läuft bereits")
+    queue_servo_command(state["paths"], "step", steps=[step])
     return ServoStatusOut(**read_servo_status(state["paths"]))
 
 

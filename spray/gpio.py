@@ -2,36 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
-import time
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
-
-# region agent log
-def _agent_log(location: str, message: str, data: dict[str, Any], hypothesis_id: str) -> None:
-    entry = {
-        "sessionId": "0911b3",
-        "timestamp": int(time.time() * 1000),
-        "location": location,
-        "message": message,
-        "data": data,
-        "hypothesisId": hypothesis_id,
-        "runId": "pre-fix",
-    }
-    line = json.dumps(entry) + "\n"
-    for path in (Path("debug-0911b3.log"), Path(__file__).resolve().parents[1] / "debug-0911b3.log"):
-        try:
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(line)
-            return
-        except OSError:
-            continue
-# endregion
 
 
 class GPIOBackend(ABC):
@@ -137,34 +113,11 @@ class LgpioGPIO(GPIOBackend):
     def set_pwm_duty(self, pin: int, duty_percent: float) -> None:
         freq = self._pwm_freq.get(pin, 1000.0)
         duty = max(0.0, min(100.0, duty_percent))
-        result = self._lgpio.tx_pwm(self._chip, pin, freq, duty)
-        # region agent log
-        _agent_log(
-            "gpio.py:set_pwm_duty",
-            "tx_pwm duty",
-            {"pin": pin, "freq": freq, "duty": duty, "result": result},
-            "H4",
-        )
-        # endregion
+        self._lgpio.tx_pwm(self._chip, pin, freq, duty)
 
     def stop_pwm(self, pin: int) -> None:
-        tx_pwm_kind = getattr(self._lgpio, "TX_PWM", 0)
-        busy_before = self._lgpio.tx_busy(self._chip, pin, tx_pwm_kind)
-        result = self._lgpio.tx_pwm(self._chip, pin, 0, 0)
-        busy_after = self._lgpio.tx_busy(self._chip, pin, tx_pwm_kind)
-        # region agent log
-        _agent_log(
-            "gpio.py:stop_pwm",
-            "tx_pwm stop",
-            {
-                "pin": pin,
-                "result": result,
-                "busy_before": busy_before,
-                "busy_after": busy_after,
-            },
-            "H3",
-        )
-        # endregion
+        # lgpio: frequency 0 disables PWM on the GPIO
+        self._lgpio.tx_pwm(self._chip, pin, 0, 0)
 
     def close(self) -> None:
         self._lgpio.gpiochip_close(self._chip)

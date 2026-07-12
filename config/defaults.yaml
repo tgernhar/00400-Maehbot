@@ -19,13 +19,18 @@ spray:
   camera_to_nozzle_mm: 20  # distance camera → nozzle along travel axis
   mower_speed_mm_s: 100    # 0.1 m/s
 
-# --- Spray servos: last slider values from the "Sprühen" page ---
+# --- Spray servos: editable test sequence on the "Sprühen" page ---
 # Pins and calibration live in config/hardware.yaml (section: servo).
 servo:
-  test_angles:
-    position: 0    # servo 1 target angle for the test run
-    tension: 0     # servo 2 target angle for the test run
-    trigger: 0     # servo 3 target angle for the test run
+  test_sequence:
+    - {servo: tension, angle: 0}
+    - {servo: position, angle: 0}
+    - {servo: trigger, angle: 0}
+    - {servo: trigger, angle: 0}
+    - {servo: tension, angle: -45}
+    - {servo: position, angle: 0}
+    - {servo: tension, angle: 0}
+    - {servo: trigger, angle: 0}
 
 # --- Drive (tank chassis via TB6612FNG) ---
 drive:

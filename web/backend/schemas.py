@@ -70,10 +70,13 @@ class DriveConfigOut(BaseModel):
     invert_right: bool
 
 
+class ServoStepIn(BaseModel):
+    servo: str
+    angle: float
+
+
 class ServoTestIn(BaseModel):
-    position: float  # servo 1 target angle (deg)
-    tension: float   # servo 2 target angle (deg)
-    trigger: float   # servo 3 target angle (deg)
+    steps: list[ServoStepIn] = Field(min_length=1)
 
 
 class ServoStatusOut(BaseModel):
@@ -88,8 +91,13 @@ class ServoLimitOut(BaseModel):
     max_angle: float
 
 
+class ServoStepOut(BaseModel):
+    servo: str
+    angle: float
+
+
 class ServoConfigOut(BaseModel):
-    test_angles: dict[str, float]
+    test_sequence: list[ServoStepOut]
     limits: dict[str, ServoLimitOut]
 
 

@@ -5,7 +5,9 @@ small JSON command file that the core process consumes in its main loop.
 
 Commands:
     {"action": "home"}
-    {"action": "test", "angles": {"position": 90, "tension": 120, "trigger": 30}}
+    {"action": "test", "steps": [{"servo": "tension", "angle": 120}, ...]}
+    {"action": "step", "steps": [{"servo": "tension", "angle": 120}]}
+    {"action": "test", "angles": {"position": 90, ...}}  # legacy
     {"action": "sweep", "servo": "tension"}
 """
 
@@ -52,9 +54,14 @@ def queue_servo_command(
     paths: StoragePaths,
     action: str,
     angles: dict[str, float] | None = None,
+    steps: list[dict[str, Any]] | None = None,
     servo: str | None = None,
 ) -> None:
     payload: dict[str, Any] = {"action": action, "ts": time.time()}
+    if steps is not None:
+        payload["steps"] = [
+            {"servo": str(s["servo"]), "angle": float(s["angle"])} for s in steps
+        ]
     if angles is not None:
         payload["angles"] = {k: float(v) for k, v in angles.items()}
     if servo is not None:
