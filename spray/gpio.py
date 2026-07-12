@@ -117,6 +117,7 @@ class LgpioGPIO(GPIOBackend):
         self._chip = lgpio.gpiochip_open(0)
         self._pwm_freq: dict[int, float] = {}
         self._claimed: set[int] = set()
+        self._pwm_active: set[int] = set()
 
     def _claim_output(self, pin: int) -> None:
         if pin in self._claimed:
@@ -172,20 +173,36 @@ class LgpioGPIO(GPIOBackend):
         freq = self._pwm_freq.get(pin, 1000.0)
         duty = max(0.0, min(100.0, duty_percent))
         self._lgpio.tx_pwm(self._chip, pin, freq, duty)
+        if duty > 0.0:
+            self._pwm_active.add(pin)
 
     def stop_pwm(self, pin: int) -> None:
-        # lgpio: frequency 0 disables PWM; tx_pulse(0,0) clears active/queued pulses
-        self._lgpio.tx_pwm(self._chip, pin, 0, 0)
+        if pin not in self._pwm_active:
+            # region agent log
+            _agent_log(
+                "gpio.py:stop_pwm",
+                "skip already stopped",
+                {"pin": pin},
+                "H2",
+            )
+            # endregion
+            return
         try:
             self._lgpio.tx_pulse(self._chip, pin, 0, 0)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("tx_pulse stop pin %s: %s", pin, exc)
+        try:
+            self._lgpio.tx_pwm(self._chip, pin, 0, 0)
+        except Exception as exc:
+            # Second stop_pwm or tx_pwm(0,0) on this lgpio build raises "bad PWM micros"
+            logger.debug("tx_pwm stop pin %s: %s", pin, exc)
+        self._pwm_active.discard(pin)
 
     def close(self) -> None:
         freed = sorted(self._claimed)
         for pin in list(self._claimed):
+            self.stop_pwm(pin)
             try:
-                self._lgpio.tx_pwm(self._chip, pin, 0, 0)
                 self._lgpio.gpio_free(self._chip, pin)
             except Exception as exc:
                 logger.debug("gpio_free pin %s: %s", pin, exc)
