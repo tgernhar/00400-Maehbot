@@ -182,6 +182,9 @@ _VISION_PROXY_PREFIXES = (
     "/api/training",
     "/api/config/spray",
     "/api/config/mode",
+    "/api/camera/preview/vision",
+    "/api/servo",
+    "/api/config/servo",
 )
 
 
@@ -347,9 +350,26 @@ def get_camera_preview(
     state: dict[str, Any] = Depends(get_app_state),
     _user: str | None = Depends(auth_dependency),
 ) -> Response:
+    """Drive-node teleop camera (local preview.jpg)."""
     path = state["paths"].preview_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Kameravorschau noch nicht verfügbar")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
+@app.get("/api/camera/preview/vision")
+def get_vision_camera_preview(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> Response:
+    """Spray/vision-node camera (preview_vision.jpg on the vision Pi)."""
+    path = state["paths"].vision_preview_path
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Vision-Kameravorschau noch nicht verfügbar")
     return FileResponse(
         path,
         media_type="image/jpeg",

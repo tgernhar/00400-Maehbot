@@ -17,7 +17,8 @@
 #     vision_url: ""            # later: http://maehbot-vision.local:8080
 # camera:
 #   source: picamera2
-#   width: 320                  # keep low on weak hardware
+#   rotate_180: true          # spray/vision Pi: mount upside-down
+#   width: 640                  # keep low on weak hardware
 #   height: 240
 #   fps: 5
 #   preview_fps: 2

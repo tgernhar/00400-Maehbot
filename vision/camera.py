@@ -16,6 +16,14 @@ from maehbot.types import Frame
 logger = logging.getLogger(__name__)
 
 
+def _encode_frame(img: Image.Image, *, rotate_180: bool = False, quality: int = 85) -> bytes:
+    if rotate_180:
+        img = img.rotate(180)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
 class Camera(ABC):
     @abstractmethod
     def start(self) -> None: ...
@@ -60,10 +68,18 @@ class MockCamera(Camera):
 class Picamera2Camera(Camera):
     """CSI camera (IMX500, OV5647, ...) via picamera2/libcamera on Raspberry Pi."""
 
-    def __init__(self, fps: int = 30, width: int = 640, height: int = 480) -> None:
+    def __init__(
+        self,
+        fps: int = 30,
+        width: int = 640,
+        height: int = 480,
+        *,
+        rotate_180: bool = False,
+    ) -> None:
         self.fps = fps
         self.width = width
         self.height = height
+        self.rotate_180 = rotate_180
         self._picam = None
 
     def start(self) -> None:
@@ -83,10 +99,9 @@ class Picamera2Camera(Camera):
         ts = time.monotonic() * 1000.0
         array = self._picam.capture_array()
         img = Image.fromarray(array)
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
+        data = _encode_frame(img, rotate_180=self.rotate_180)
         return Frame(
-            data=buf.getvalue(),
+            data=data,
             width=img.width,
             height=img.height,
             timestamp_ms=ts,
@@ -101,11 +116,20 @@ class Picamera2Camera(Camera):
 class UsbCamera(Camera):
     """USB webcam via OpenCV V4L2 (fallback for nodes without CSI camera)."""
 
-    def __init__(self, device: int = 0, fps: int = 30, width: int = 640, height: int = 480) -> None:
+    def __init__(
+        self,
+        device: int = 0,
+        fps: int = 30,
+        width: int = 640,
+        height: int = 480,
+        *,
+        rotate_180: bool = False,
+    ) -> None:
         self.device = device
         self.fps = fps
         self.width = width
         self.height = height
+        self.rotate_180 = rotate_180
         self._cap = None
 
     def start(self) -> None:
@@ -130,9 +154,8 @@ class UsbCamera(Camera):
         ts = time.monotonic() * 1000.0
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(rgb)
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
-        return Frame(data=buf.getvalue(), width=img.width, height=img.height, timestamp_ms=ts)
+        data = _encode_frame(img, rotate_180=self.rotate_180)
+        return Frame(data=data, width=img.width, height=img.height, timestamp_ms=ts)
 
     def stop(self) -> None:
         if self._cap:
@@ -154,6 +177,7 @@ def create_camera(config: dict, force_mock: bool = False) -> Camera:
     fps = int(cam_cfg.get("fps", 30))
     width = int(cam_cfg.get("width", 640))
     height = int(cam_cfg.get("height", 480))
+    rotate_180 = bool(cam_cfg.get("rotate_180", False))
     source = str(cam_cfg.get("source", "auto")).lower()
     if force_mock or sys.platform != "linux" or source == "mock":
         return MockCamera(fps=fps, width=width, height=height)
@@ -163,10 +187,13 @@ def create_camera(config: dict, force_mock: bool = False) -> Camera:
             fps=fps,
             width=width,
             height=height,
+            rotate_180=rotate_180,
         )
     # source: picamera2 or auto
     if _picamera2_available():
-        return Picamera2Camera(fps=fps, width=width, height=height)
+        return Picamera2Camera(
+            fps=fps, width=width, height=height, rotate_180=rotate_180
+        )
     if source == "picamera2":
         logger.warning("Picamera2 nicht verfügbar, nutze MockCamera")
     return MockCamera(fps=fps, width=width, height=height)

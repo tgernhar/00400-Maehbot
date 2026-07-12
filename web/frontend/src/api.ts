@@ -413,6 +413,12 @@ export function cameraPreviewUrl(cacheBust?: number): string {
   return `${API}/camera/preview${q}`;
 }
 
+/** Spray / vision / training camera (proxied to vision node when web runs on drive node). */
+export function visionCameraPreviewUrl(cacheBust?: number): string {
+  const q = cacheBust != null ? `?t=${cacheBust}` : "";
+  return `${API}/camera/preview/vision${q}`;
+}
+
 export function trainingFrameUrl(sessionId: number, frameIndex: number): string {
   return `${API}/training/sessions/${sessionId}/frames/${frameIndex}/image`;
 }

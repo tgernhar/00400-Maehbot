@@ -70,6 +70,7 @@ coverage:
 # --- Camera ---
 camera:
   source: auto     # auto | picamera2 | usb | mock (auto = picamera2 if available)
+  rotate_180: false  # true on spray/vision Pi if camera is mounted upside-down
   fps: 30
   preview_fps: 15  # live preview refresh rate (single preview.jpg on disk)
   width: 640

@@ -15,7 +15,8 @@ class StoragePaths:
         self.db_dir = self.root / "db"
         self.db_path = self.db_dir / "maehbot.sqlite"
         self.status_path = self.root / "status.json"
-        self.preview_path = self.root / "preview.jpg"
+        self.preview_path = self.root / "preview.jpg"  # drive-node teleop camera
+        self.vision_preview_path = self.root / "preview_vision.jpg"  # spray/vision node
         self.recording_status_path = self.root / "recording_status.json"
         self.recording_command_path = self.root / "recording_command.json"
         self.drive_status_path = self.root / "drive_status.json"

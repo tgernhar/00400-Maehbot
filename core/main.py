@@ -247,7 +247,7 @@ class CoreApplication:
         now = time.monotonic()
         if frame.data and now - self._last_preview_write >= self._preview_interval_s:
             try:
-                self.paths.preview_path.write_bytes(frame.data)
+                self.paths.vision_preview_path.write_bytes(frame.data)
                 self._last_preview_write = now
             except OSError:
                 logger.warning("Failed to write camera preview")
@@ -324,9 +324,12 @@ class CoreApplication:
             else:
                 logger.warning("Unknown servo action: %s", action)
             if action in ("home", "test", "step") and not started:
-                logger.warning("Servo command rejected (sequence busy): %s", action)
+                logger.warning("Servo command rejected: %s", action)
                 status = self.servo_sequencer.status_dict()
-                status["error"] = "Sequenz läuft bereits"
+                if not self.servo_sequencer.hardware_ready:
+                    status["error"] = status.get("error") or "Servo-GPIO nicht verfügbar"
+                else:
+                    status["error"] = "Sequenz läuft bereits"
                 write_servo_status(self.paths, status)
                 self._last_servo_status_write = time.monotonic()
                 return
@@ -444,11 +447,29 @@ class CoreApplication:
             logger.warning("Failed to write camera preview")
         self._last_preview_write = now
 
+    def _try_init_servos_at_startup(self) -> bool:
+        """Home servos before motion; failure must not block camera/vision."""
+        try:
+            if not self.servo_sequencer.ensure_hardware():
+                status = self.servo_sequencer.status_dict()
+                write_servo_status(self.paths, status)
+                return False
+            self.servo_sequencer.run_home_blocking()
+            write_servo_status(self.paths, self.servo_sequencer.status_dict())
+            return True
+        except Exception as exc:
+            logger.exception("Servo-Initialisierung fehlgeschlagen")
+            status = self.servo_sequencer.status_dict()
+            status["error"] = str(exc)
+            write_servo_status(self.paths, status)
+            return False
+
     def run(self) -> None:
-        # Servos must reach a defined home position before anything else moves
-        self.servo_sequencer.setup()
-        self.servo_sequencer.run_home_blocking()
-        write_servo_status(self.paths, self.servo_sequencer.status_dict())
+        if not self._try_init_servos_at_startup():
+            logger.warning(
+                "Servo-GPIO nicht verfügbar — Core startet ohne Servos "
+                "(Kamera/Vision aktiv). Alten Core-Prozess beenden oder Pi neu starten."
+            )
 
         if self.node.runs_drive:
             self.drive_controller.start()

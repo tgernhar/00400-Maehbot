@@ -330,6 +330,10 @@ button {
   margin: 1rem 0;
 }
 
+.spray-camera-panel {
+  margin-top: 0.5rem;
+}
+
 .servo-hold-wrap {
   margin: 1rem 0 1.5rem;
 }

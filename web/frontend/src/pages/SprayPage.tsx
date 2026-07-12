@@ -9,7 +9,10 @@ import {
   startServoHome,
   startServoStep,
   startServoTest,
+  visionCameraPreviewUrl,
 } from "../api";
+
+const PREVIEW_REFRESH_MS = 200;
 
 const SERVO_OPTIONS: { key: ServoName; label: string }[] = [
   { key: "position", label: "Servo 1 – Positionierung" },
@@ -51,6 +54,8 @@ export default function SprayPage() {
   const [status, setStatus] = useState<ServoStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [previewTick, setPreviewTick] = useState(0);
+  const [previewAvailable, setPreviewAvailable] = useState(true);
   const busy = status != null && status.state !== "idle";
   const coreOnline = coreReachable(status);
 
@@ -78,6 +83,11 @@ export default function SprayPage() {
       cancelled = true;
       clearInterval(t);
     };
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => setPreviewTick(Date.now()), PREVIEW_REFRESH_MS);
+    return () => clearInterval(t);
   }, []);
 
   function updateStep(index: number, patch: Partial<ServoStep>) {
@@ -183,6 +193,28 @@ export default function SprayPage() {
       {status?.error && <p className="error">{status.error}</p>}
       {message && <p className="ok">{message}</p>}
       {error && <p className="error">{error}</p>}
+
+      <section className="live-panel spray-camera-panel">
+        <h2>Kamerabild</h2>
+        <p className="muted">
+          Livebild vom Core — zur Kontrolle der Düsenausrichtung während der Servo-Tests.
+        </p>
+        <div className="live-viewport">
+          {previewAvailable ? (
+            <img
+              src={visionCameraPreviewUrl(previewTick)}
+              alt="Kameravorschau"
+              className="camera-preview"
+              onLoad={() => setPreviewAvailable(true)}
+              onError={() => setPreviewAvailable(false)}
+            />
+          ) : (
+            <p className="muted live-placeholder">
+              Kameravorschau nicht verfügbar — Core läuft mit Picamera2?
+            </p>
+          )}
+        </div>
+      </section>
 
       <div className="servo-sequence-wrap">
         <table className="servo-sequence-table">

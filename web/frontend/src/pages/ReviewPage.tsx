@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Detection,
-  cameraPreviewUrl,
+  visionCameraPreviewUrl,
   detectionImageUrl,
   fetchDetections,
   fetchStatus,
@@ -99,7 +99,7 @@ export default function ReviewPage() {
             <>
               <h2>Live-Vorschau</h2>
               <img
-                src={cameraPreviewUrl(previewTick)}
+                src={visionCameraPreviewUrl(previewTick)}
                 alt="Kameravorschau"
                 className="camera-preview"
                 onError={(e) => {

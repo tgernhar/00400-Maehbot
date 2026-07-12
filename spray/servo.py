@@ -240,8 +240,13 @@ class ServoSequencer:
         self._thread: threading.Thread | None = None
         self._state = "idle"
         self._error: str | None = None
+        self._hardware_ready = False
         # Ordered log of (servo_name, angle) moves, useful for tests/debugging
         self.move_log: list[tuple[str, float]] = []
+
+    @property
+    def hardware_ready(self) -> bool:
+        return self._hardware_ready
 
     def setup(self) -> None:
         for name, channel in self.channels.items():
@@ -254,6 +259,20 @@ class ServoSequencer:
             )
             # endregion
             channel.setup()
+        self._hardware_ready = True
+
+    def ensure_hardware(self) -> bool:
+        """Claim servo GPIO once; safe to retry after a previous failure."""
+        if self._hardware_ready:
+            return True
+        try:
+            self.setup()
+            return True
+        except Exception as exc:
+            logger.error("Servo hardware setup failed: %s", exc)
+            with self._lock:
+                self._error = str(exc)
+            return False
 
     @property
     def state(self) -> str:
@@ -361,6 +380,8 @@ class ServoSequencer:
         start_index: int = 1,
         apply_holds: bool = True,
     ) -> bool:
+        if not self.ensure_hardware():
+            return False
         with self._lock:
             if self._state != "idle":
                 return False

@@ -42,8 +42,8 @@ leitet dessen Backend alle Vision-Endpunkte (`/api/detections`, `/api/training`,
 `/api/config/spray`, `/api/config/mode`, `/api/classes`) transparent an den
 Vision-Knoten weiter. Der Browser spricht immer nur eine Adresse an.
 
-- Fahren + Kamera-Vorschau: lokal auf dem Fahr-Knoten
-- Review/Training/Spray-Einstellungen: per Proxy vom Vision-Knoten
+- Fahren + Kamera-Vorschau: lokal auf dem Fahr-Knoten (`/api/camera/preview`)
+- Sprühen/Review/Training: Vision-Kamera vom Sprüh-Pi (`/api/camera/preview/vision`, per Proxy)
 - Status-Banner: zeigt Rolle und „Vision-Knoten nicht verbunden“, solange kein
   Peer erreichbar ist; Tank/Testmodus kommen vom Vision-Knoten dazu
 

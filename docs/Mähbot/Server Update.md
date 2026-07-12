@@ -52,12 +52,52 @@ Empfehlung: Den Git-Weg nutzen – sauber nachvollziehbar und `config/local.yam
 Soll ich diese Kurzanleitung als Abschnitt „Update auf den Pi“ in `docs/deploy.md` ergänzen?
 
 
-Terminal 1 Starten
+# Terminal 1 Starten
 
 cd ~/maehbot && source .venv/bin/activate
 python -m core.main
 
-Terminal 2 Starten
+# Terminal 2 Starten
+
 cd ~/maehbot && source .venv/bin/activate
 python -m web.backend.app
 
+### 1. Blockierende Prozesse finden
+
+Auf dem Pi:
+
+# Läuft noch ein Core?
+
+pgrep -af "core.main"
+
+# Docker-Core aktiv?
+
+docker ps
+
+cd ~/maehbot/docker 2>/dev/null && docker compose ps
+
+### 2. Alles stoppen, was GPIO nutzt
+
+# Alle Core-Instanzen beenden
+
+pkill -9 -f "python -m core.main"
+
+pkill -9 -f "core.main"
+
+# Falls Docker-Core läuft:
+
+cd ~/maehbot/docker && docker compose stop core
+
+Kurz warten, dann prüfen:
+
+pgrep -af "core.main" # sollte leer sein
+
+### 3. Core neu starten
+
+cd ~/maehbot
+
+source .venv/bin/activate
+
+python -m core.main
+
+Im Log sollte u. a. stehen: `Picamera2 started` und kein `GPIO busy`.

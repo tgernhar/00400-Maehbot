@@ -138,7 +138,16 @@ class LgpioGPIO(GPIOBackend):
             "H1",
         )
         # endregion
-        self._lgpio.gpio_claim_output(self._chip, pin)
+        try:
+            self._lgpio.gpio_claim_output(self._chip, pin)
+        except self._lgpio.error as exc:
+            if "busy" not in str(exc).lower():
+                raise
+            try:
+                self._lgpio.gpio_free(self._chip, pin)
+                self._lgpio.gpio_claim_output(self._chip, pin)
+            except Exception:
+                raise exc
         self._claimed.add(pin)
 
     def setup_output(self, pin: int) -> None:

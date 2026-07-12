@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BBox,
-  cameraPreviewUrl,
+  visionCameraPreviewUrl,
   captureSnapshot,
   deleteTrainingSession,
   exportYolo,
@@ -343,7 +343,7 @@ export default function TrainingPage() {
         <div className="live-viewport">
           {liveActive ? (
             <img
-              src={cameraPreviewUrl(previewTick)}
+              src={visionCameraPreviewUrl(previewTick)}
               alt="Livebild"
               className="camera-preview"
               onError={(e) => {
