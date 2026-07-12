@@ -85,6 +85,19 @@ def sequence_steps_from_config(servo_cfg: dict[str, Any]) -> list[dict[str, Any]
     ]
 
 
+def hold_until_from_config(servo_cfg: dict[str, Any]) -> dict[str, int | None]:
+    """Per-servo step index until which PWM stays active (None = release after each move)."""
+    raw = servo_cfg.get("hold_until_step", {}) or {}
+    result: dict[str, int | None] = {}
+    for name in SERVO_NAMES:
+        value = raw.get(name)
+        if value is None or value == "":
+            result[name] = None
+        else:
+            result[name] = int(value)
+    return result
+
+
 _DEFAULTS: dict[str, dict[str, float]] = {
     "position": {"pin": 18, "min_angle": -180, "max_angle": 180},
     "tension": {"pin": 19, "min_angle": -45, "max_angle": 180},
@@ -188,6 +201,7 @@ class ServoSequencer:
         self.channels = build_servo_channels(gpio, servo_cfg)
         self.step_delay_s = float(servo_cfg.get("step_delay_ms", 800)) / 1000.0
         self.release_when_idle = bool(servo_cfg.get("release_when_idle", True))
+        self.hold_until_step = hold_until_from_config(servo_cfg)
         self._sleep = sleep_fn
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
@@ -230,7 +244,7 @@ class ServoSequencer:
 
     def run_home(self) -> bool:
         """Drive the home sequence asynchronously. Returns False when busy."""
-        return self._start("homing", self._home_steps())
+        return self._start("homing", self._home_steps(), apply_holds=False)
 
     def run_test(self, position: float, tension: float, trigger: float) -> bool:
         """Legacy test run: three targets then home. False when busy."""
@@ -240,14 +254,16 @@ class ServoSequencer:
             )
         )
 
-    def run_sequence(self, steps: list[tuple[str, float]]) -> bool:
+    def run_sequence(
+        self, steps: list[tuple[str, float]], start_index: int = 1
+    ) -> bool:
         """Run a custom step list. False when busy or an unknown servo is given."""
         parsed: list[tuple[str, float]] = []
         for name, angle in steps:
             if name not in self.channels:
                 return False
             parsed.append((name, self.channels[name].clamp(angle)))
-        return self._start("testing", parsed)
+        return self._start("testing", parsed, start_index=start_index)
 
     def run_sweep(self, servo_name: str) -> bool:
         """Diagnostic sweep for one servo only (min → mid → max → neutral).
@@ -275,7 +291,7 @@ class ServoSequencer:
         with self._lock:
             self._state = "homing"
             self._error = None
-        self._execute(self._home_steps())
+        self._execute(self._home_steps(), apply_holds=False)
 
     def wait_idle(self, timeout_s: float = 30.0) -> None:
         deadline = time.monotonic() + timeout_s
@@ -290,14 +306,24 @@ class ServoSequencer:
     def _home_steps(self) -> list[tuple[str, float]]:
         return home_sequence_steps()
 
-    def _start(self, state: str, steps: list[tuple[str, float]]) -> bool:
+    def _start(
+        self,
+        state: str,
+        steps: list[tuple[str, float]],
+        *,
+        start_index: int = 1,
+        apply_holds: bool = True,
+    ) -> bool:
         with self._lock:
             if self._state != "idle":
                 return False
             self._state = state
             self._error = None
         self._thread = threading.Thread(
-            target=self._execute, args=(steps,), daemon=True
+            target=self._execute,
+            args=(steps,),
+            kwargs={"start_index": start_index, "apply_holds": apply_holds},
+            daemon=True,
         )
         self._thread.start()
         return True
@@ -308,14 +334,34 @@ class ServoSequencer:
         for channel in self.channels.values():
             channel.release()
 
-    def _execute(self, steps: list[tuple[str, float]]) -> None:
+    def _execute(
+        self,
+        steps: list[tuple[str, float]],
+        *,
+        start_index: int = 1,
+        apply_holds: bool = True,
+    ) -> None:
         error: str | None = None
+        holds: dict[str, int] = {}
         try:
-            for name, angle in steps:
+            for offset, (name, angle) in enumerate(steps):
+                step_idx = start_index + offset
                 moved = self.channels[name].move_to(angle)
                 self.move_log.append((name, moved))
                 self._sleep(self.step_delay_s)
-                if self.release_when_idle:
+                if not self.release_when_idle:
+                    continue
+                if apply_holds:
+                    hold_cfg = self.hold_until_step.get(name)
+                    if hold_cfg is not None and hold_cfg >= step_idx:
+                        holds[name] = hold_cfg
+                    elif name not in holds:
+                        self.channels[name].release()
+                    for servo, until in list(holds.items()):
+                        if until == step_idx:
+                            self.channels[servo].release()
+                            del holds[servo]
+                else:
                     self.channels[name].release()
         except Exception as exc:
             logger.exception("Servo sequence failed")

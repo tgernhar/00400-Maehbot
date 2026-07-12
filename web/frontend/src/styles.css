@@ -330,6 +330,46 @@ button {
   margin: 1rem 0;
 }
 
+.servo-hold-wrap {
+  margin: 1rem 0 1.5rem;
+}
+
+.servo-hold-wrap h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.servo-hold-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #141a22;
+  border: 1px solid #333;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.servo-hold-table th,
+.servo-hold-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #2a3340;
+  vertical-align: middle;
+}
+
+.servo-hold-table th {
+  background: #1a222c;
+  font-weight: 600;
+}
+
+.servo-hold-table tr:last-child td {
+  border-bottom: none;
+}
+
+.servo-hold-table input[type="number"] {
+  width: 100px;
+  padding: 0.4rem;
+}
+
 .servo-sequence-table {
   width: 100%;
   border-collapse: collapse;

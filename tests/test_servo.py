@@ -220,6 +220,22 @@ class TestServoSequencer:
         stops = [pin for pin, duty in gpio.pwm_log if duty == -1.0]
         assert 18 in stops
 
+    def test_hold_until_step_keeps_pwm_between_steps(self) -> None:
+        gpio = MockGPIO()
+        cfg = {
+            **SERVO_CFG,
+            "hold_until_step": {"tension": 2, "position": None, "trigger": None},
+        }
+        seq = ServoSequencer(gpio, cfg, sleep_fn=lambda _s: None)
+        seq.setup()
+        assert seq.run_sequence([("tension", 10.0), ("position", 20.0)])
+        seq.wait_idle()
+        # tension: move, no release after step 1 (hold until 2), release after step 2
+        # position: move, release after step 2
+        tension_stops = [i for i, (p, d) in enumerate(gpio.pwm_log) if p == 19 and d == -1.0]
+        assert len(tension_stops) >= 1
+        assert gpio.pwm_log[0] == (19, pytest.approx(seq.channels["tension"].duty_for_angle(10.0)))
+
 
 class TestServoCommandIpc:
     def test_queue_and_consume(self, tmp_path) -> None:

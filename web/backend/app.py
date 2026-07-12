@@ -21,8 +21,12 @@ from spray.servo import SERVO_NAMES, servo_limits
 from spray.servo_command import queue_servo_command, read_servo_status
 
 try:
-    from spray.servo import sequence_steps_from_config
+    from spray.servo import hold_until_from_config, sequence_steps_from_config
 except ImportError:
+
+    def hold_until_from_config(servo_cfg: dict[str, Any]) -> dict[str, int | None]:
+        return {name: None for name in SERVO_NAMES}
+
     def sequence_steps_from_config(servo_cfg: dict[str, Any]) -> list[dict[str, Any]]:
         """Fallback when spray/servo.py on the device is not yet updated."""
         raw = servo_cfg.get("test_sequence")
@@ -87,6 +91,7 @@ from web.backend.schemas import (
     ServoLimitOut,
     ServoStepIn,
     ServoStepOut,
+    ServoStepRunIn,
     ServoStatusOut,
     ServoTestIn,
     SprayConfigIn,
@@ -490,11 +495,50 @@ def _servo_config_out(config: dict[str, Any]) -> ServoConfigOut:
             ServoStepOut(servo=s["servo"], angle=s["angle"])
             for s in sequence_steps_from_config(servo_cfg)
         ],
+        hold_until_step=hold_until_from_config(servo_cfg),
         limits={
             name: ServoLimitOut(min_angle=lo, max_angle=hi)
             for name, (lo, hi) in limits.items()
         },
     )
+
+
+def _validate_hold_until_step(
+    steps: list[dict[str, Any]],
+    hold_until: dict[str, int | None] | None,
+) -> dict[str, int | None]:
+    holds = hold_until_from_config({"hold_until_step": hold_until or {}})
+    if not hold_until:
+        return holds
+    total = len(steps)
+    for name, value in hold_until.items():
+        if name not in SERVO_NAMES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unbekannter Servo '{name}' in hold_until_step",
+            )
+        if value is None:
+            holds[name] = None
+            continue
+        if value < 1 or value > total:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Halten-bis-Schritt für '{name}' muss zwischen 1 und {total} liegen",
+            )
+        first_idx = next(
+            (i + 1 for i, s in enumerate(steps) if s["servo"] == name),
+            None,
+        )
+        if first_idx is not None and value < first_idx:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Halten-bis-Schritt für '{name}' muss mindestens {first_idx} sein "
+                    f"(erster Schritt mit diesem Servo)"
+                ),
+            )
+        holds[name] = int(value)
+    return holds
 
 
 def _validate_servo_step(step: ServoStepIn, config: dict[str, Any]) -> dict[str, Any]:
@@ -536,10 +580,11 @@ def post_servo_test(
     steps: list[dict[str, Any]] = []
     for step in body.steps:
         steps.append(_validate_servo_step(step, state["config"]))
+    holds = _validate_hold_until_step(steps, body.hold_until_step)
     current = read_servo_status(state["paths"])
     if current.get("state") not in (None, "idle"):
         raise HTTPException(status_code=409, detail="Servo-Sequenz läuft bereits")
-    save_local_config({"servo": {"test_sequence": steps}})
+    save_local_config({"servo": {"test_sequence": steps, "hold_until_step": holds}})
     reload_config(state)
     queue_servo_command(state["paths"], "test", steps=steps)
     return ServoStatusOut(**read_servo_status(state["paths"]))
@@ -547,15 +592,30 @@ def post_servo_test(
 
 @app.post("/api/servo/step", response_model=ServoStatusOut)
 def post_servo_step(
-    body: ServoStepIn,
+    body: ServoStepRunIn,
     state: dict[str, Any] = Depends(get_app_state),
     _user: str | None = Depends(auth_dependency),
 ) -> ServoStatusOut:
     step = _validate_servo_step(body, state["config"])
+    holds = hold_until_from_config(state["config"].get("servo", {}))
+    hold_val = holds.get(step["servo"])
+    if hold_val is not None and hold_val < body.step_index:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Halten-bis-Schritt für '{step['servo']}' muss mindestens "
+                f"{body.step_index} sein"
+            ),
+        )
     current = read_servo_status(state["paths"])
     if current.get("state") not in (None, "idle"):
         raise HTTPException(status_code=409, detail="Servo-Sequenz läuft bereits")
-    queue_servo_command(state["paths"], "step", steps=[step])
+    queue_servo_command(
+        state["paths"],
+        "step",
+        steps=[step],
+        step_index=body.step_index,
+    )
     return ServoStatusOut(**read_servo_status(state["paths"]))
 
 

@@ -75,8 +75,13 @@ class ServoStepIn(BaseModel):
     angle: float
 
 
+class ServoStepRunIn(ServoStepIn):
+    step_index: int = Field(ge=1, description="1-based step number in the full sequence")
+
+
 class ServoTestIn(BaseModel):
     steps: list[ServoStepIn] = Field(min_length=1)
+    hold_until_step: dict[str, int | None] | None = None
 
 
 class ServoStatusOut(BaseModel):
@@ -98,6 +103,7 @@ class ServoStepOut(BaseModel):
 
 class ServoConfigOut(BaseModel):
     test_sequence: list[ServoStepOut]
+    hold_until_step: dict[str, int | None]
     limits: dict[str, ServoLimitOut]
 
 

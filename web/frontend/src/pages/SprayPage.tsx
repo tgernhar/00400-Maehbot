@@ -26,6 +26,12 @@ const STATE_LABELS: Record<string, string> = {
 
 const CORE_STALE_SECONDS = 5;
 
+const EMPTY_HOLDS: Record<ServoName, number | null> = {
+  position: null,
+  tension: null,
+  trigger: null,
+};
+
 function coreReachable(status: ServoStatus | null): boolean {
   if (!status?.updated_at) return false;
   return Date.now() / 1000 - status.updated_at < CORE_STALE_SECONDS;
@@ -41,9 +47,21 @@ function stepsFromConfig(cfg: ServoConfig): ServoStep[] {
   return seq.map((s) => ({ servo: s.servo, angle: s.angle }));
 }
 
+function holdsFromConfig(cfg: ServoConfig): Record<ServoName, number | null> {
+  return { ...EMPTY_HOLDS, ...(cfg.hold_until_step ?? {}) };
+}
+
+function firstStepForServo(steps: ServoStep[], servo: ServoName): number | null {
+  const idx = steps.findIndex((s) => s.servo === servo);
+  return idx >= 0 ? idx + 1 : null;
+}
+
 export default function SprayPage() {
   const [config, setConfig] = useState<ServoConfig | null>(null);
   const [steps, setSteps] = useState<ServoStep[] | null>(null);
+  const [holdUntil, setHoldUntil] = useState<Record<ServoName, number | null> | null>(
+    null
+  );
   const [status, setStatus] = useState<ServoStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -55,6 +73,7 @@ export default function SprayPage() {
       .then((cfg) => {
         setConfig(cfg);
         setSteps(stepsFromConfig(cfg));
+        setHoldUntil(holdsFromConfig(cfg));
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Fehler"));
   }, []);
@@ -81,6 +100,26 @@ export default function SprayPage() {
     setSteps(steps.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   }
 
+  function updateHold(servo: ServoName, raw: string) {
+    if (!holdUntil || !steps) return;
+    if (raw.trim() === "") {
+      setHoldUntil({ ...holdUntil, [servo]: null });
+      return;
+    }
+    const value = Number(raw);
+    const minStep = firstStepForServo(steps, servo);
+    if (!Number.isFinite(value) || value < 1 || value > steps.length) {
+      setError(`Halten-bis-Schritt für ${servo}: Wert zwischen 1 und ${steps.length}`);
+      return;
+    }
+    if (minStep != null && value < minStep) {
+      setError(`Halten-bis-Schritt für ${servo}: mindestens ${minStep} (erster Schritt)`);
+      return;
+    }
+    setError(null);
+    setHoldUntil({ ...holdUntil, [servo]: value });
+  }
+
   function addStep() {
     if (!steps) return;
     setSteps([...steps, { servo: "position", angle: 0 }]);
@@ -96,7 +135,7 @@ export default function SprayPage() {
     setError(null);
     setMessage(null);
     try {
-      setStatus(await startServoStep(steps[index]));
+      setStatus(await startServoStep(steps[index], index + 1));
       setMessage(`Schritt ${index + 1} gestartet`);
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
@@ -105,11 +144,11 @@ export default function SprayPage() {
   }
 
   async function onTest() {
-    if (!steps) return;
+    if (!steps || !holdUntil) return;
     setError(null);
     setMessage(null);
     try {
-      setStatus(await startServoTest(steps));
+      setStatus(await startServoTest(steps, holdUntil));
       setMessage("Testlauf gestartet");
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
@@ -129,7 +168,7 @@ export default function SprayPage() {
     }
   }
 
-  if (!config || !steps) {
+  if (!config || !steps || !holdUntil) {
     return (
       <div>
         <h1>Sprühen</h1>
@@ -142,9 +181,9 @@ export default function SprayPage() {
     <div>
       <h1>Sprühen</h1>
       <p className="muted">
-        Testablauf: Jeder Schritt fährt einen Servo auf den Verfahrwert. Mit
-        „Testen“ in der Zeile wird nur dieser Schritt ausgeführt; der Button
-        unten startet die gesamte Sequenz und speichert sie.
+        Testablauf: Jeder Schritt fährt einen Servo auf den Verfahrwert. Optional kann
+        pro Servo ein Halte-Schritt gesetzt werden — dann bleibt der Servo bis zu
+        diesem Schritt aktiv angesteuert. Leer = nach jedem eigenen Schritt abschalten.
       </p>
       {status && (
         <p className={busy ? "warn" : "ok"}>
@@ -160,6 +199,46 @@ export default function SprayPage() {
       {status?.error && <p className="error">{status.error}</p>}
       {message && <p className="ok">{message}</p>}
       {error && <p className="error">{error}</p>}
+
+      <div className="servo-hold-wrap">
+        <h2>Halten bis Schritt (optional)</h2>
+        <table className="servo-hold-table">
+          <thead>
+            <tr>
+              <th>Servo</th>
+              <th>Halten bis Schritt</th>
+              <th>Hinweis</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SERVO_OPTIONS.map(({ key, label }) => {
+              const minStep = firstStepForServo(steps, key);
+              return (
+                <tr key={key}>
+                  <td>{label}</td>
+                  <td>
+                    <input
+                      type="number"
+                      min={minStep ?? 1}
+                      max={steps.length}
+                      step={1}
+                      value={holdUntil[key] ?? ""}
+                      disabled={busy || minStep == null}
+                      placeholder="—"
+                      onChange={(e) => updateHold(key, e.target.value)}
+                    />
+                  </td>
+                  <td className="muted">
+                    {minStep == null
+                      ? "Servo kommt in der Sequenz nicht vor"
+                      : `min. ${minStep}, max. ${steps.length}`}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       <div className="servo-sequence-wrap">
         <table className="servo-sequence-table">

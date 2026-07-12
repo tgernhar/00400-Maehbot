@@ -27,7 +27,7 @@ from spray.controller import SprayController
 from spray.gpio import create_gpio_backend, PinMap
 from spray.safety import evaluate_spray_allowed
 from spray.scheduler import SprayScheduler
-from spray.servo import ServoSequencer
+from spray.servo import ServoSequencer, hold_until_from_config
 from spray.servo_command import consume_servo_command, write_servo_status
 from storage.async_writer import AsyncStorageWriter
 from storage.database import Database
@@ -195,6 +195,7 @@ class CoreApplication:
         self.servo_sequencer.release_when_idle = bool(
             servo_cfg.get("release_when_idle", True)
         )
+        self.servo_sequencer.hold_until_step = hold_until_from_config(servo_cfg)
         drive_cfg = self.config.get("drive", {})
         self.drive_controller.update_config(
             max_speed=float(drive_cfg.get("max_speed", 1.0)),
@@ -316,8 +317,10 @@ class CoreApplication:
                 steps_raw = command.get("steps") or []
                 if len(steps_raw) == 1:
                     s = steps_raw[0]
+                    step_index = int(command.get("step_index", 1))
                     started = self.servo_sequencer.run_sequence(
-                        [(str(s["servo"]), float(s["angle"]))]
+                        [(str(s["servo"]), float(s["angle"]))],
+                        start_index=step_index,
                     )
                 else:
                     logger.warning("Servo step command needs exactly one step")

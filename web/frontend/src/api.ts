@@ -105,6 +105,7 @@ export interface ServoLimit {
 
 export interface ServoConfig {
   test_sequence: ServoStep[];
+  hold_until_step: Record<ServoName, number | null>;
   limits: Record<ServoName, ServoLimit>;
 }
 
@@ -267,11 +268,14 @@ export async function fetchServoConfig(): Promise<ServoConfig> {
   return r.json();
 }
 
-export async function startServoTest(steps: ServoStep[]): Promise<ServoStatus> {
+export async function startServoTest(
+  steps: ServoStep[],
+  holdUntilStep: Record<ServoName, number | null>
+): Promise<ServoStatus> {
   const r = await fetch(`${API}/servo/test`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ steps }),
+    body: JSON.stringify({ steps, hold_until_step: holdUntilStep }),
   });
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
@@ -280,11 +284,14 @@ export async function startServoTest(steps: ServoStep[]): Promise<ServoStatus> {
   return r.json();
 }
 
-export async function startServoStep(step: ServoStep): Promise<ServoStatus> {
+export async function startServoStep(
+  step: ServoStep,
+  stepIndex: number
+): Promise<ServoStatus> {
   const r = await fetch(`${API}/servo/step`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(step),
+    body: JSON.stringify({ ...step, step_index: stepIndex }),
   });
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));

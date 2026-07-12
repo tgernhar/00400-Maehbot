@@ -31,6 +31,10 @@ servo:
     - {servo: position, angle: 0}
     - {servo: tension, angle: 0}
     - {servo: trigger, angle: 0}
+  hold_until_step:
+    position: null
+    tension: null
+    trigger: null
 
 # --- Drive (tank chassis via TB6612FNG) ---
 drive:

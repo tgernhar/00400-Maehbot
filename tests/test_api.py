@@ -71,6 +71,7 @@ def test_servo_config_get(client):
     assert r.status_code == 200
     data = r.json()
     assert len(data["test_sequence"]) >= 1
+    assert "hold_until_step" in data
     assert data["limits"]["trigger"]["max_angle"] == 45
 
 
@@ -122,19 +123,20 @@ def test_servo_step_queues_command(client):
     paths = state["paths"]
     r = client.post(
         "/api/servo/step",
-        json={"servo": "position", "angle": 45},
+        json={"servo": "position", "angle": 45, "step_index": 1},
     )
     assert r.status_code == 200
     cmd = consume_servo_command(paths)
     assert cmd is not None
     assert cmd["action"] == "step"
     assert cmd["steps"] == [{"servo": "position", "angle": 45.0}]
+    assert cmd["step_index"] == 1
 
 
 def test_servo_step_rejects_out_of_range(client):
     r = client.post(
         "/api/servo/step",
-        json={"servo": "trigger", "angle": 90},
+        json={"servo": "trigger", "angle": 90, "step_index": 1},
     )
     assert r.status_code == 422
 
