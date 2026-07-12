@@ -2,12 +2,36 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
+import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# region agent log
+def _agent_log(location: str, message: str, data: dict[str, Any], hypothesis_id: str) -> None:
+    entry = {
+        "sessionId": "0911b3",
+        "timestamp": int(time.time() * 1000),
+        "location": location,
+        "message": message,
+        "data": data,
+        "hypothesisId": hypothesis_id,
+        "runId": "gpio-busy",
+    }
+    line = json.dumps(entry) + "\n"
+    for path in (Path("debug-0911b3.log"), Path(__file__).resolve().parents[1] / "debug-0911b3.log"):
+        try:
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(line)
+            return
+        except OSError:
+            continue
+# endregion
 
 
 class GPIOBackend(ABC):
@@ -92,9 +116,32 @@ class LgpioGPIO(GPIOBackend):
         self._lgpio = lgpio
         self._chip = lgpio.gpiochip_open(0)
         self._pwm_freq: dict[int, float] = {}
+        self._claimed: set[int] = set()
+
+    def _claim_output(self, pin: int) -> None:
+        if pin in self._claimed:
+            # region agent log
+            _agent_log(
+                "gpio.py:_claim_output",
+                "skip already claimed",
+                {"pin": pin, "claimed": sorted(self._claimed)},
+                "H3",
+            )
+            # endregion
+            return
+        # region agent log
+        _agent_log(
+            "gpio.py:_claim_output",
+            "before gpio_claim_output",
+            {"pin": pin, "claimed": sorted(self._claimed)},
+            "H1",
+        )
+        # endregion
+        self._lgpio.gpio_claim_output(self._chip, pin)
+        self._claimed.add(pin)
 
     def setup_output(self, pin: int) -> None:
-        self._lgpio.gpio_claim_output(self._chip, pin)
+        self._claim_output(pin)
 
     def setup_input(self, pin: int) -> None:
         self._lgpio.gpio_claim_input(self._chip, pin)
@@ -106,7 +153,18 @@ class LgpioGPIO(GPIOBackend):
         return bool(self._lgpio.gpio_read(self._chip, pin))
 
     def setup_pwm(self, pin: int, frequency_hz: float) -> None:
-        self._lgpio.gpio_claim_output(self._chip, pin)
+        try:
+            self._claim_output(pin)
+        except Exception as exc:
+            # region agent log
+            _agent_log(
+                "gpio.py:setup_pwm",
+                "gpio_claim_output failed",
+                {"pin": pin, "error": str(exc), "claimed": sorted(self._claimed)},
+                "H1",
+            )
+            # endregion
+            raise
         self._pwm_freq[pin] = frequency_hz
         self._lgpio.tx_pwm(self._chip, pin, frequency_hz, 0.0)
 
@@ -120,7 +178,23 @@ class LgpioGPIO(GPIOBackend):
         self._lgpio.tx_pwm(self._chip, pin, 0, 0)
 
     def close(self) -> None:
+        freed = sorted(self._claimed)
+        for pin in list(self._claimed):
+            try:
+                self._lgpio.tx_pwm(self._chip, pin, 0, 0)
+                self._lgpio.gpio_free(self._chip, pin)
+            except Exception as exc:
+                logger.debug("gpio_free pin %s: %s", pin, exc)
+            self._claimed.discard(pin)
         self._lgpio.gpiochip_close(self._chip)
+        # region agent log
+        _agent_log(
+            "gpio.py:close",
+            "gpio chip closed",
+            {"freed_pins": freed},
+            "H2",
+        )
+        # endregion
 
 
 def create_gpio_backend(config: dict[str, Any], force_mock: bool = False) -> GPIOBackend:
