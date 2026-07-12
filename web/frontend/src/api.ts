@@ -91,9 +91,10 @@ export interface ServoAngles {
 }
 
 export interface ServoStatus {
-  state: "idle" | "homing" | "testing";
+  state: "idle" | "homing" | "testing" | "sweeping";
   angles: Record<string, number | null>;
   error: string | null;
+  updated_at: number;
 }
 
 export interface ServoLimit {

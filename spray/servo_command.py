@@ -6,6 +6,7 @@ small JSON command file that the core process consumes in its main loop.
 Commands:
     {"action": "home"}
     {"action": "test", "angles": {"position": 90, "tension": 120, "trigger": 30}}
+    {"action": "sweep", "servo": "tension"}
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ def default_servo_status() -> dict[str, Any]:
         "state": "idle",
         "angles": {"position": None, "tension": None, "trigger": None},
         "error": None,
+        "updated_at": 0.0,
     }
 
 
@@ -50,10 +52,13 @@ def queue_servo_command(
     paths: StoragePaths,
     action: str,
     angles: dict[str, float] | None = None,
+    servo: str | None = None,
 ) -> None:
     payload: dict[str, Any] = {"action": action, "ts": time.time()}
     if angles is not None:
         payload["angles"] = {k: float(v) for k, v in angles.items()}
+    if servo is not None:
+        payload["servo"] = servo
     paths.servo_command_path.write_text(
         json.dumps(payload, ensure_ascii=False),
         encoding="utf-8",

@@ -150,6 +150,7 @@ class ServoSequencer:
                     name: ch.current_angle for name, ch in self.channels.items()
                 },
                 "error": self._error,
+                "updated_at": time.time(),
             }
 
     def run_home(self) -> bool:
@@ -164,6 +165,27 @@ class ServoSequencer:
             ("trigger", trigger),
         ] + self._home_steps()
         return self._start("testing", steps)
+
+    def run_sweep(self, servo_name: str) -> bool:
+        """Diagnostic sweep for one servo only (min → mid → max → neutral).
+
+        Mirrors the manual lgpio duty sweep used for hardware checks.
+        Only the named servo moves; the others stay put.
+        """
+        if servo_name not in self.channels:
+            return False
+        steps = [(servo_name, angle) for angle in self._sweep_angles(servo_name)]
+        return self._start("sweeping", steps)
+
+    @staticmethod
+    def _sweep_angles(servo_name: str) -> list[float]:
+        """Per-servo sweep positions: neutral, high, low, neutral."""
+        sweeps: dict[str, list[float]] = {
+            "position": [0.0, 90.0, -90.0, 0.0],
+            "tension": [0.0, 90.0, -45.0, 0.0],
+            "trigger": [0.0, 22.0, 45.0, 0.0],
+        }
+        return sweeps[servo_name]
 
     def run_home_blocking(self) -> None:
         """Home sequence executed on the caller's thread (startup init)."""

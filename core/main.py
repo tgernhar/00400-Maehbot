@@ -305,11 +305,13 @@ class CoreApplication:
             else:
                 logger.warning("Unknown servo action: %s", action)
             if action in ("home", "test") and not started:
+                logger.warning("Servo command rejected (sequence busy): %s", action)
                 status = self.servo_sequencer.status_dict()
                 status["error"] = "Sequenz läuft bereits"
                 write_servo_status(self.paths, status)
                 self._last_servo_status_write = time.monotonic()
                 return
+            logger.info("Servo command started: %s", action)
             write_servo_status(self.paths, self.servo_sequencer.status_dict())
             self._last_servo_status_write = time.monotonic()
 
@@ -386,28 +388,6 @@ class CoreApplication:
                 },
             )
             logger.info("Training snapshot saved as session %s", result["id"])
-            # #region agent log
-            try:
-                import json as _json
-                from pathlib import Path as _Path
-
-                _Path("debug-bc4e4e.log").open("a", encoding="utf-8").write(
-                    _json.dumps(
-                        {
-                            "sessionId": "bc4e4e",
-                            "runId": "core",
-                            "hypothesisId": "H3",
-                            "location": "core/main.py:_handle_snapshot",
-                            "message": "snapshot session registered",
-                            "data": {"session_id": result["id"], "name": result["name"]},
-                            "timestamp": int(time.time() * 1000),
-                        }
-                    )
-                    + "\n"
-                )
-            except OSError:
-                pass
-            # #endregion
         except Exception as exc:
             logger.exception("Training snapshot failed")
             write_recording_status(
@@ -448,7 +428,7 @@ class CoreApplication:
     def run(self) -> None:
         # Servos must reach a defined home position before anything else moves
         self.servo_sequencer.setup()
-        self.servo_sequencer.run_home()
+        self.servo_sequencer.run_home_blocking()
         write_servo_status(self.paths, self.servo_sequencer.status_dict())
 
         if self.node.runs_drive:

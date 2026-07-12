@@ -1,5 +1,15 @@
 # Copy to config/local.yaml and adjust for your Raspberry Pi (not in git)
 
+# --- Example: Pi 4 servo-only test (no camera, no LiDAR, no motors) ---
+# storage:
+#   root_path: /var/lib/maehbot
+# camera:
+#   source: mock
+# lidar:
+#   enabled: false
+# drive:
+#   enabled: false
+
 # --- Example: drive node (e.g. Pi 1 B+ with CSI camera, motors only) ---
 # node:
 #   role: drive

@@ -27,11 +27,19 @@ const SERVOS: { key: keyof ServoAngles; label: string; description: string }[] =
   },
 ];
 
-const STATE_LABELS: Record<ServoStatus["state"], string> = {
+const STATE_LABELS: Record<string, string> = {
   idle: "Bereit",
   homing: "Grundstellung wird angefahren…",
   testing: "Testlauf läuft…",
+  sweeping: "Einzeltest läuft…",
 };
+
+const CORE_STALE_SECONDS = 5;
+
+function coreReachable(status: ServoStatus | null): boolean {
+  if (!status?.updated_at) return false;
+  return Date.now() / 1000 - status.updated_at < CORE_STALE_SECONDS;
+}
 
 export default function SprayPage() {
   const [config, setConfig] = useState<ServoConfig | null>(null);
@@ -40,6 +48,7 @@ export default function SprayPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const busy = status != null && status.state !== "idle";
+  const coreOnline = coreReachable(status);
 
   useEffect(() => {
     fetchServoConfig()
@@ -113,6 +122,12 @@ export default function SprayPage() {
           Status: {STATE_LABELS[status.state] ?? status.state}
         </p>
       )}
+      {status && !coreOnline && (
+        <p className="error">
+          Core-Prozess nicht erreichbar — bitte in einer zweiten SSH-Sitzung starten:{" "}
+          <code>python -m core.main</code>
+        </p>
+      )}
       {status?.error && <p className="error">{status.error}</p>}
       {message && <p className="ok">{message}</p>}
       {error && <p className="error">{error}</p>}
@@ -157,10 +172,10 @@ export default function SprayPage() {
         })}
       </div>
       <div className="servo-actions">
-        <button onClick={onTest} disabled={busy}>
+        <button onClick={onTest} disabled={busy || !coreOnline}>
           Testen
         </button>
-        <button onClick={onHome} disabled={busy}>
+        <button onClick={onHome} disabled={busy || !coreOnline}>
           Grundstellung anfahren
         </button>
       </div>

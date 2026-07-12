@@ -226,21 +226,6 @@ export default function TrainingPage() {
       `Foto_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}`;
     try {
       await captureSnapshot(name);
-      // #region agent log
-      fetch("http://127.0.0.1:7350/ingest/6180ef00-058c-42a8-86a0-0e6278a26d8a", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "bc4e4e" },
-        body: JSON.stringify({
-          sessionId: "bc4e4e",
-          runId: "ui",
-          hypothesisId: "H2",
-          location: "TrainingPage.tsx:handleCaptureSnapshot",
-          message: "snapshot API accepted",
-          data: { name },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       for (let i = 0; i < 10; i += 1) {
         await new Promise((r) => setTimeout(r, 500));
         const status = await fetchRecordingStatus();

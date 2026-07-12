@@ -80,6 +80,7 @@ class ServoStatusOut(BaseModel):
     state: str = "idle"
     angles: dict[str, float | None] = Field(default_factory=dict)
     error: str | None = None
+    updated_at: float = 0.0
 
 
 class ServoLimitOut(BaseModel):

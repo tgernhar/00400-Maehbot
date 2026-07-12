@@ -700,28 +700,6 @@ def snapshot_recording(
         )
     name = body.name.strip() or "Foto"
     queue_recording_command(state["paths"], "snapshot", name)
-    # #region agent log
-    try:
-        import json as _json
-        from pathlib import Path as _Path
-
-        _Path("debug-bc4e4e.log").open("a", encoding="utf-8").write(
-            _json.dumps(
-                {
-                    "sessionId": "bc4e4e",
-                    "runId": "api",
-                    "hypothesisId": "H1",
-                    "location": "web/backend/app.py:snapshot_recording",
-                    "message": "snapshot command queued",
-                    "data": {"name": name},
-                    "timestamp": int(time.time() * 1000),
-                }
-            )
-            + "\n"
-        )
-    except OSError:
-        pass
-    # #endregion
     return RecordingStatusOut(**read_recording_status(state["paths"]))
 
 
