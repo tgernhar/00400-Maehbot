@@ -50,3 +50,14 @@ scp -r . tgernhar@10.233.159.212:/home/tgernhar/pi/maehbot
 Empfehlung: Den Git-Weg nutzen – sauber nachvollziehbar und `config/local.yaml` bleibt unangetastet.
 
 Soll ich diese Kurzanleitung als Abschnitt „Update auf den Pi“ in `docs/deploy.md` ergänzen?
+
+
+Terminal 1 Starten
+
+cd ~/maehbot && source .venv/bin/activate
+python -m core.main
+
+Terminal 2 Starten
+cd ~/maehbot && source .venv/bin/activate
+python -m web.backend.app
+

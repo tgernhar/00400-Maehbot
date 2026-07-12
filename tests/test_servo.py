@@ -159,6 +159,14 @@ class TestServoSequencer:
         assert seq.state == "idle"
         assert seq.channels["tension"].current_angle == 0.0
 
+    def test_release_pwm_after_sequence(self) -> None:
+        gpio = MockGPIO()
+        seq = ServoSequencer(gpio, SERVO_CFG, sleep_fn=lambda _s: None)
+        seq.setup()
+        seq.run_home()
+        seq.wait_idle()
+        assert any(duty == -1.0 for _pin, duty in gpio.pwm_log)
+
 
 class TestServoCommandIpc:
     def test_queue_and_consume(self, tmp_path) -> None:

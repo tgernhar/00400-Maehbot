@@ -72,6 +72,10 @@ class ServoChannel:
         self.current_angle = angle
         return angle
 
+    def release(self) -> None:
+        """Stop PWM so the servo is not actively holding position."""
+        self.gpio.stop_pwm(self.pin)
+
 
 def servo_limits(servo_cfg: dict[str, Any]) -> dict[str, tuple[float, float]]:
     """Angle limits per servo from config (no GPIO needed, safe for web)."""
@@ -121,6 +125,7 @@ class ServoSequencer:
     ) -> None:
         self.channels = build_servo_channels(gpio, servo_cfg)
         self.step_delay_s = float(servo_cfg.get("step_delay_ms", 800)) / 1000.0
+        self.release_when_idle = bool(servo_cfg.get("release_when_idle", True))
         self._sleep = sleep_fn
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
@@ -227,6 +232,12 @@ class ServoSequencer:
         self._thread.start()
         return True
 
+    def _release_all(self) -> None:
+        if not self.release_when_idle:
+            return
+        for channel in self.channels.values():
+            channel.release()
+
     def _execute(self, steps: list[tuple[str, float]]) -> None:
         error: str | None = None
         try:
@@ -235,10 +246,14 @@ class ServoSequencer:
                 self.move_log.append((name, moved))
                 if i < len(steps) - 1:
                     self._sleep(self.step_delay_s)
+            # Let the final position settle before cutting PWM
+            if steps:
+                self._sleep(self.step_delay_s)
         except Exception as exc:
             logger.exception("Servo sequence failed")
             error = str(exc)
         finally:
+            self._release_all()
             with self._lock:
                 self._state = "idle"
                 self._error = error

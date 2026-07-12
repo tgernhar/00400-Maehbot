@@ -192,6 +192,9 @@ class CoreApplication:
         self.spray_controller.update_duration(float(spray_cfg.get("duration_ms", 100)))
         servo_cfg = self.config.get("servo", {})
         self.servo_sequencer.step_delay_s = float(servo_cfg.get("step_delay_ms", 800)) / 1000.0
+        self.servo_sequencer.release_when_idle = bool(
+            servo_cfg.get("release_when_idle", True)
+        )
         drive_cfg = self.config.get("drive", {})
         self.drive_controller.update_config(
             max_speed=float(drive_cfg.get("max_speed", 1.0)),

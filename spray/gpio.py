@@ -32,6 +32,10 @@ class GPIOBackend(ABC):
         """Set PWM duty cycle in percent (0..100)."""
 
     @abstractmethod
+    def stop_pwm(self, pin: int) -> None:
+        """Stop PWM on a pin (servos go limp, no holding torque)."""
+
+    @abstractmethod
     def close(self) -> None: ...
 
 
@@ -65,6 +69,10 @@ class MockGPIO(GPIOBackend):
         duty = max(0.0, min(100.0, duty_percent))
         self.pwm[pin] = duty
         self.pwm_log.append((pin, duty))
+
+    def stop_pwm(self, pin: int) -> None:
+        self.pwm[pin] = 0.0
+        self.pwm_log.append((pin, -1.0))
 
     def set_input(self, pin: int, value: bool) -> None:
         self._inputs[pin] = value
@@ -106,6 +114,10 @@ class LgpioGPIO(GPIOBackend):
         freq = self._pwm_freq.get(pin, 1000.0)
         duty = max(0.0, min(100.0, duty_percent))
         self._lgpio.tx_pwm(self._chip, pin, freq, duty)
+
+    def stop_pwm(self, pin: int) -> None:
+        # lgpio: frequency 0 disables PWM on the GPIO
+        self._lgpio.tx_pwm(self._chip, pin, 0, 0)
 
     def close(self) -> None:
         self._lgpio.gpiochip_close(self._chip)

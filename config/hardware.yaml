@@ -23,6 +23,7 @@ motor:
 servo:
   pwm_frequency_hz: 50
   step_delay_ms: 800   # wait between sequence steps so servos finish moving
+  release_when_idle: true  # stop PWM after sequences so servos do not buzz/hold
   position:            # servo 1 — nozzle positioning
     pin: 18            # physical pin 12
     min_angle: -180
