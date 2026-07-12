@@ -17,8 +17,35 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from drive.command import queue_drive_command, read_drive_status
-from spray.servo import SERVO_NAMES, servo_limits, sequence_steps_from_config
+from spray.servo import SERVO_NAMES, servo_limits
 from spray.servo_command import queue_servo_command, read_servo_status
+
+try:
+    from spray.servo import sequence_steps_from_config
+except ImportError:
+    def sequence_steps_from_config(servo_cfg: dict[str, Any]) -> list[dict[str, Any]]:
+        """Fallback when spray/servo.py on the device is not yet updated."""
+        raw = servo_cfg.get("test_sequence")
+        if raw:
+            steps: list[dict[str, Any]] = []
+            for item in raw:
+                name = str(item.get("servo", ""))
+                if name in SERVO_NAMES:
+                    steps.append({"servo": name, "angle": float(item.get("angle", 0.0))})
+            if steps:
+                return steps
+        angles = servo_cfg.get("test_angles", {}) or {}
+        legacy = [
+            ("tension", float(angles.get("tension", 0.0))),
+            ("position", float(angles.get("position", 0.0))),
+            ("trigger", float(angles.get("trigger", 0.0))),
+            ("trigger", 0.0),
+            ("tension", -45.0),
+            ("position", 0.0),
+            ("tension", 0.0),
+            ("trigger", 0.0),
+        ]
+        return [{"servo": name, "angle": angle} for name, angle in legacy]
 from maehbot.config_loader import get_project_root, load_config, save_local_config
 from navigation.coverage import queue_coverage_command, read_coverage_status
 from maehbot.node import NodeConfig

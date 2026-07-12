@@ -31,8 +31,14 @@ function coreReachable(status: ServoStatus | null): boolean {
   return Date.now() / 1000 - status.updated_at < CORE_STALE_SECONDS;
 }
 
-function cloneSteps(steps: ServoStep[]): ServoStep[] {
-  return steps.map((s) => ({ ...s }));
+function stepsFromConfig(cfg: ServoConfig): ServoStep[] {
+  const seq = cfg.test_sequence;
+  if (!Array.isArray(seq) || seq.length === 0) {
+    throw new Error(
+      "Servo-Konfiguration unvollständig (test_sequence fehlt). Bitte Frontend-Build deployen."
+    );
+  }
+  return seq.map((s) => ({ servo: s.servo, angle: s.angle }));
 }
 
 export default function SprayPage() {
@@ -48,7 +54,7 @@ export default function SprayPage() {
     fetchServoConfig()
       .then((cfg) => {
         setConfig(cfg);
-        setSteps(cloneSteps(cfg.test_sequence));
+        setSteps(stepsFromConfig(cfg));
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Fehler"));
   }, []);
