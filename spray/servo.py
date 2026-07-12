@@ -12,14 +12,37 @@ the core realtime loop never blocks on servo travel time.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from spray.gpio import GPIOBackend
 
 logger = logging.getLogger(__name__)
+
+# region agent log
+def _agent_log(location: str, message: str, data: dict[str, Any], hypothesis_id: str) -> None:
+    entry = {
+        "sessionId": "0911b3",
+        "timestamp": int(time.time() * 1000),
+        "location": location,
+        "message": message,
+        "data": data,
+        "hypothesisId": hypothesis_id,
+        "runId": "pre-fix",
+    }
+    line = json.dumps(entry) + "\n"
+    for path in (Path("debug-0911b3.log"), Path(__file__).resolve().parents[1] / "debug-0911b3.log"):
+        try:
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(line)
+            return
+        except OSError:
+            continue
+# endregion
 
 SERVO_NAMES = ("position", "tension", "trigger")
 
@@ -126,6 +149,14 @@ class ServoSequencer:
         self.channels = build_servo_channels(gpio, servo_cfg)
         self.step_delay_s = float(servo_cfg.get("step_delay_ms", 800)) / 1000.0
         self.release_when_idle = bool(servo_cfg.get("release_when_idle", True))
+        # region agent log
+        _agent_log(
+            "servo.py:__init__",
+            "sequencer init",
+            {"release_when_idle": self.release_when_idle},
+            "H2",
+        )
+        # endregion
         self._sleep = sleep_fn
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
@@ -233,6 +264,17 @@ class ServoSequencer:
         return True
 
     def _release_all(self) -> None:
+        # region agent log
+        _agent_log(
+            "servo.py:_release_all",
+            "release_all entry",
+            {
+                "release_when_idle": self.release_when_idle,
+                "pins": [ch.pin for ch in self.channels.values()],
+            },
+            "H1",
+        )
+        # endregion
         if not self.release_when_idle:
             return
         for channel in self.channels.values():
@@ -253,6 +295,14 @@ class ServoSequencer:
             logger.exception("Servo sequence failed")
             error = str(exc)
         finally:
+            # region agent log
+            _agent_log(
+                "servo.py:_execute",
+                "sequence finally releasing",
+                {"step_count": len(steps), "error": error},
+                "H1",
+            )
+            # endregion
             self._release_all()
             with self._lock:
                 self._state = "idle"
