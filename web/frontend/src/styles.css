@@ -346,10 +346,6 @@ button {
   pointer-events: none;
 }
 
-.live-viewport {
-  position: relative;
-}
-
 .servo-hold-wrap {
   margin: 1rem 0 1.5rem;
 }

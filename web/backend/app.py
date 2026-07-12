@@ -345,6 +345,17 @@ def get_detection_image(
     return FileResponse(path, media_type="image/jpeg")
 
 
+def _jpeg_preview_response(path: Path) -> Response:
+    return Response(
+        content=path.read_bytes(),
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
 @app.get("/api/camera/preview")
 def get_camera_preview(
     state: dict[str, Any] = Depends(get_app_state),
@@ -354,11 +365,7 @@ def get_camera_preview(
     path = state["paths"].preview_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Kameravorschau noch nicht verfügbar")
-    return FileResponse(
-        path,
-        media_type="image/jpeg",
-        headers={"Cache-Control": "no-store, max-age=0"},
-    )
+    return _jpeg_preview_response(path)
 
 
 @app.get("/api/camera/preview/vision")
@@ -372,22 +379,8 @@ def get_vision_camera_preview(
     if not path.exists():
         path = paths.preview_path
     if not path.exists():
-        # region agent log
-        logger.warning(
-            "vision preview missing: %s and %s",
-            paths.vision_preview_path,
-            paths.preview_path,
-        )
-        # endregion
         raise HTTPException(status_code=404, detail="Vision-Kameravorschau noch nicht verfügbar")
-    # region agent log
-    logger.debug("Serving vision preview from %s", path)
-    # endregion
-    return FileResponse(
-        path,
-        media_type="image/jpeg",
-        headers={"Cache-Control": "no-store, max-age=0"},
-    )
+    return _jpeg_preview_response(path)
 
 
 @app.get("/api/config/spray", response_model=SprayConfigOut)

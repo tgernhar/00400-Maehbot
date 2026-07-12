@@ -12,37 +12,14 @@ the core realtime loop never blocks on servo travel time.
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
 import time
-from pathlib import Path
 from typing import Any
 
 from spray.gpio import GPIOBackend
 
 logger = logging.getLogger(__name__)
-
-# region agent log
-def _agent_log(location: str, message: str, data: dict[str, Any], hypothesis_id: str) -> None:
-    entry = {
-        "sessionId": "0911b3",
-        "timestamp": int(time.time() * 1000),
-        "location": location,
-        "message": message,
-        "data": data,
-        "hypothesisId": hypothesis_id,
-        "runId": "gpio-busy",
-    }
-    line = json.dumps(entry) + "\n"
-    for path in (Path("debug-0911b3.log"), Path(__file__).resolve().parents[1] / "debug-0911b3.log"):
-        try:
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(line)
-            return
-        except OSError:
-            continue
-# endregion
 
 SERVO_NAMES = ("position", "tension", "trigger")
 
@@ -250,14 +227,6 @@ class ServoSequencer:
 
     def setup(self) -> None:
         for name, channel in self.channels.items():
-            # region agent log
-            _agent_log(
-                "servo.py:setup",
-                "setting up channel",
-                {"servo": name, "pin": channel.pin},
-                "H4",
-            )
-            # endregion
             channel.setup()
         self._hardware_ready = True
 
