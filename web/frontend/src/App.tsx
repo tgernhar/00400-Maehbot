@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import { fetchStatus, Status } from "./api";
 import { Nav, StatusBanner } from "./components/Layout";
 import DrivePage from "./pages/DrivePage";
+import MapPage from "./pages/MapPage";
 import ReviewPage from "./pages/ReviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import SprayPage from "./pages/SprayPage";
@@ -25,6 +26,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<ReviewPage />} />
           <Route path="/drive" element={<DrivePage />} />
+          <Route path="/map" element={<MapPage />} />
           <Route path="/spray" element={<SprayPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/training" element={<TrainingPage />} />

@@ -26,6 +26,12 @@ class StoragePaths:
         self.servo_status_path = self.root / "servo_status.json"
         self.servo_command_path = self.root / "servo_command.json"
         self.lidar_preview_path = self.root / "lidar.jpg"
+        self.nav_status_path = self.root / "nav_status.json"
+        self.nav_command_path = self.root / "nav_command.json"
+        self.zones_path = self.root / "zones.json"
+        self.map_image_path = self.root / "map.png"
+        self.map_meta_path = self.root / "map_meta.json"
+        self.map_saved_path = self.root / "map_saved.png"
 
     def ensure(self) -> None:
         for p in (

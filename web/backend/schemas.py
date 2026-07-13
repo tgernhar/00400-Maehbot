@@ -159,6 +159,87 @@ class CoverageConfigOut(BaseModel):
     max_avoid_attempts: int
 
 
+class MapMetaOut(BaseModel):
+    size_pixels: int = 800
+    size_meters: float = 20.0
+
+
+class NavGotoIn(BaseModel):
+    x_m: float = Field(ge=0.0)
+    y_m: float = Field(ge=0.0)
+
+
+class NavStatusOut(BaseModel):
+    state: str = "idle"
+    mode: str = "goto"
+    x_m: float | None = None
+    y_m: float | None = None
+    theta_deg: float | None = None
+    target_x_m: float | None = None
+    target_y_m: float | None = None
+    waypoints: list[list[float]] = Field(default_factory=list)
+    line_index: int = 0
+    line_count: int = 0
+    zone_name: str = ""
+    lidar_connected: bool = False
+    slam_available: bool = False
+    error: str | None = None
+
+
+class ZoneSchema(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(default="Zone", max_length=120)
+    x_m: float = Field(ge=0.0)
+    y_m: float = Field(ge=0.0)
+    width_m: float = Field(gt=0.0)
+    height_m: float = Field(gt=0.0)
+    direction_deg: float = Field(default=0.0, ge=0.0, lt=360.0)
+
+
+class MappingConfigIn(BaseModel):
+    enabled: bool | None = None
+    map_size_pixels: int | None = Field(default=None, ge=100, le=4000)
+    map_size_meters: float | None = Field(default=None, gt=1.0, le=200.0)
+    map_quality: int | None = Field(default=None, ge=0, le=255)
+    hole_width_mm: float | None = Field(default=None, gt=0.0)
+    update_rate_hz: float | None = Field(default=None, gt=0.0, le=20.0)
+    localize_only: bool | None = None
+
+
+class MappingConfigOut(BaseModel):
+    enabled: bool
+    map_size_pixels: int
+    map_size_meters: float
+    map_quality: int
+    hole_width_mm: float
+    update_rate_hz: float
+    localize_only: bool
+
+
+class NavigationConfigIn(BaseModel):
+    drive_speed: float | None = Field(default=None, ge=0.0, le=1.0)
+    turn_speed: float | None = Field(default=None, ge=0.0, le=1.0)
+    waypoint_tolerance_m: float | None = Field(default=None, gt=0.0)
+    heading_tolerance_deg: float | None = Field(default=None, gt=0.0, le=90.0)
+    obstacle_stop_m: float | None = Field(default=None, ge=0.0)
+    obstacle_sector_deg: float | None = Field(default=None, ge=0.0, le=360.0)
+    robot_radius_m: float | None = Field(default=None, ge=0.0)
+    line_spacing_m: float | None = Field(default=None, gt=0.0)
+    max_replans: int | None = Field(default=None, ge=0)
+
+
+class NavigationConfigOut(BaseModel):
+    drive_speed: float
+    turn_speed: float
+    waypoint_tolerance_m: float
+    heading_tolerance_deg: float
+    obstacle_stop_m: float
+    obstacle_sector_deg: float
+    robot_radius_m: float
+    line_spacing_m: float
+    max_replans: int
+
+
 class ModeConfigIn(BaseModel):
     test_mode: bool | None = None
     min_confidence: float | None = None

@@ -689,3 +689,78 @@ button {
   margin: 0 0 0.75rem;
   font-size: 1.1rem;
 }
+
+/* SLAM map page */
+.map-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0.75rem 0;
+}
+
+.map-toolbar-spacer {
+  flex: 1;
+}
+
+.map-toolbar button.active {
+  background: #2a4a6a;
+  border-color: #7eb8ff;
+}
+
+.map-canvas-wrap {
+  position: relative;
+  max-width: 800px;
+}
+
+.map-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #0a0e12;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.map-canvas.zone-mode {
+  cursor: cell;
+}
+
+.map-placeholder {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  text-align: center;
+  padding: 1rem;
+}
+
+.zones-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+
+.zones-table th,
+.zones-table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #26303c;
+}
+
+.zones-table input[type="text"] {
+  width: 140px;
+  padding: 0.35rem;
+}
+
+.zones-table input[type="number"] {
+  width: 80px;
+  padding: 0.35rem;
+}
+
+.zones-actions {
+  display: flex;
+  gap: 0.5rem;
+}

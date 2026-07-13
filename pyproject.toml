@@ -20,6 +20,10 @@ core = [
     "picamera2>=0.3.0; platform_system=='Linux'",
     "lgpio>=0.2.0; platform_system=='Linux'",
 ]
+# SLAM mapping additionally requires BreezySLAM, which is not on PyPI.
+# Install it from source on the drive node (see docs/mapping-navigation.md):
+#   git clone https://github.com/simondlevy/BreezySLAM
+#   pip install ./BreezySLAM/python
 web = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",

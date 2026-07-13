@@ -60,6 +60,12 @@ except ImportError:
         return [{"servo": name, "angle": angle} for name, angle in legacy]
 from maehbot.config_loader import get_project_root, load_config, save_local_config
 from navigation.coverage import queue_coverage_command, read_coverage_status
+from navigation.navigator import (
+    load_zones,
+    queue_nav_command,
+    read_nav_status,
+    save_zones,
+)
 from maehbot.node import NodeConfig
 from storage.database import Database
 from storage.paths import StoragePaths
@@ -91,8 +97,15 @@ from web.backend.schemas import (
     DriveConfigOut,
     DriveStatusOut,
     LoginIn,
+    MapMetaOut,
+    MappingConfigIn,
+    MappingConfigOut,
     ModeConfigIn,
     ModeConfigOut,
+    NavGotoIn,
+    NavStatusOut,
+    NavigationConfigIn,
+    NavigationConfigOut,
     RecordingStartIn,
     RecordingStatusOut,
     ServoConfigOut,
@@ -108,6 +121,7 @@ from web.backend.schemas import (
     TokenOut,
     TrainingSessionOut,
     YoloExportOut,
+    ZoneSchema,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -748,6 +762,196 @@ def put_coverage_config(
     save_local_config(updates)
     reload_config(state)
     return _coverage_config_out(state["config"])
+
+
+# -- SLAM map & navigation ---------------------------------------------------
+
+
+@app.get("/api/map/image")
+def get_map_image(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> Response:
+    path = state["paths"].map_image_path
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Karte noch nicht verfügbar")
+    return FileResponse(
+        path,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
+@app.get("/api/map/meta", response_model=MapMetaOut)
+def get_map_meta(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> MapMetaOut:
+    path = state["paths"].map_meta_path
+    if path.exists():
+        try:
+            return MapMetaOut(**json.loads(path.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, OSError):
+            pass
+    mapping = state["config"].get("mapping", {})
+    return MapMetaOut(
+        size_pixels=int(mapping.get("map_size_pixels", 800)),
+        size_meters=float(mapping.get("map_size_meters", 20.0)),
+    )
+
+
+@app.post("/api/map/reset", response_model=NavStatusOut)
+def post_map_reset(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> NavStatusOut:
+    queue_nav_command(state["paths"], "map_reset")
+    return NavStatusOut(**read_nav_status(state["paths"]))
+
+
+@app.post("/api/map/save", response_model=NavStatusOut)
+def post_map_save(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> NavStatusOut:
+    queue_nav_command(state["paths"], "map_save")
+    return NavStatusOut(**read_nav_status(state["paths"]))
+
+
+@app.get("/api/nav/status", response_model=NavStatusOut)
+def get_nav_status(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> NavStatusOut:
+    return NavStatusOut(**read_nav_status(state["paths"]))
+
+
+@app.post("/api/nav/goto", response_model=NavStatusOut)
+def post_nav_goto(
+    body: NavGotoIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> NavStatusOut:
+    current = read_nav_status(state["paths"])
+    if current.get("state") in ("turning", "driving"):
+        raise HTTPException(status_code=409, detail="Navigation läuft bereits")
+    queue_nav_command(state["paths"], "goto", x_m=body.x_m, y_m=body.y_m)
+    return NavStatusOut(**read_nav_status(state["paths"]))
+
+
+@app.post("/api/nav/stop", response_model=NavStatusOut)
+def post_nav_stop(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> NavStatusOut:
+    queue_nav_command(state["paths"], "stop")
+    return NavStatusOut(**read_nav_status(state["paths"]))
+
+
+@app.get("/api/zones", response_model=list[ZoneSchema])
+def get_zones(
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> list[ZoneSchema]:
+    return [ZoneSchema(**z) for z in load_zones(state["paths"])]
+
+
+@app.put("/api/zones", response_model=list[ZoneSchema])
+def put_zones(
+    body: list[ZoneSchema],
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> list[ZoneSchema]:
+    save_zones(state["paths"], [z.model_dump() for z in body])
+    return body
+
+
+@app.post("/api/zones/{zone_id}/mow", response_model=NavStatusOut)
+def post_zone_mow(
+    zone_id: str,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> NavStatusOut:
+    zones = load_zones(state["paths"])
+    if not any(str(z.get("id")) == zone_id for z in zones):
+        raise HTTPException(status_code=404, detail="Zone nicht gefunden")
+    current = read_nav_status(state["paths"])
+    if current.get("state") in ("turning", "driving"):
+        raise HTTPException(status_code=409, detail="Navigation läuft bereits")
+    queue_nav_command(state["paths"], "mow_zone", zone_id=zone_id)
+    return NavStatusOut(**read_nav_status(state["paths"]))
+
+
+def _mapping_config_out(config: dict[str, Any]) -> MappingConfigOut:
+    mapping = config.get("mapping", {})
+    return MappingConfigOut(
+        enabled=bool(mapping.get("enabled", True)),
+        map_size_pixels=int(mapping.get("map_size_pixels", 800)),
+        map_size_meters=float(mapping.get("map_size_meters", 20.0)),
+        map_quality=int(mapping.get("map_quality", 50)),
+        hole_width_mm=float(mapping.get("hole_width_mm", 300)),
+        update_rate_hz=float(mapping.get("update_rate_hz", 5)),
+        localize_only=bool(mapping.get("localize_only", False)),
+    )
+
+
+@app.get("/api/config/mapping", response_model=MappingConfigOut)
+def get_mapping_config(state: dict[str, Any] = Depends(get_app_state)) -> MappingConfigOut:
+    return _mapping_config_out(state["config"])
+
+
+@app.put("/api/config/mapping", response_model=MappingConfigOut)
+def put_mapping_config(
+    body: MappingConfigIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> MappingConfigOut:
+    updates: dict[str, Any] = {"mapping": {}}
+    for field in MappingConfigIn.model_fields:
+        value = getattr(body, field)
+        if value is not None:
+            updates["mapping"][field] = value
+    save_local_config(updates)
+    reload_config(state)
+    return _mapping_config_out(state["config"])
+
+
+def _navigation_config_out(config: dict[str, Any]) -> NavigationConfigOut:
+    nav = config.get("navigation", {})
+    return NavigationConfigOut(
+        drive_speed=float(nav.get("drive_speed", 0.5)),
+        turn_speed=float(nav.get("turn_speed", 0.5)),
+        waypoint_tolerance_m=float(nav.get("waypoint_tolerance_m", 0.15)),
+        heading_tolerance_deg=float(nav.get("heading_tolerance_deg", 8.0)),
+        obstacle_stop_m=float(nav.get("obstacle_stop_m", 0.30)),
+        obstacle_sector_deg=float(nav.get("obstacle_sector_deg", 60.0)),
+        robot_radius_m=float(nav.get("robot_radius_m", 0.25)),
+        line_spacing_m=float(nav.get("line_spacing_m", 0.15)),
+        max_replans=int(nav.get("max_replans", 3)),
+    )
+
+
+@app.get("/api/config/navigation", response_model=NavigationConfigOut)
+def get_navigation_config(
+    state: dict[str, Any] = Depends(get_app_state),
+) -> NavigationConfigOut:
+    return _navigation_config_out(state["config"])
+
+
+@app.put("/api/config/navigation", response_model=NavigationConfigOut)
+def put_navigation_config(
+    body: NavigationConfigIn,
+    state: dict[str, Any] = Depends(get_app_state),
+    _user: str | None = Depends(auth_dependency),
+) -> NavigationConfigOut:
+    updates: dict[str, Any] = {"navigation": {}}
+    for field in NavigationConfigIn.model_fields:
+        value = getattr(body, field)
+        if value is not None:
+            updates["navigation"][field] = value
+    save_local_config(updates)
+    reload_config(state)
+    return _navigation_config_out(state["config"])
 
 
 @app.get("/api/training/sessions", response_model=list[TrainingSessionOut])

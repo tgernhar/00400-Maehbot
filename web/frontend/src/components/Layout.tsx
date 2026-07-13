@@ -41,6 +41,7 @@ export function Nav() {
       <strong>Maehbot</strong>
       <Link to="/">Review</Link>
       <Link to="/drive">Fahren</Link>
+      <Link to="/map">Karte</Link>
       <Link to="/spray">Sprühen</Link>
       <Link to="/settings">Spray-Einstellungen</Link>
       <Link to="/training">Training</Link>

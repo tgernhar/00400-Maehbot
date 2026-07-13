@@ -23,6 +23,13 @@ from navigation.coverage import (
 )
 from navigation.lidar import LidarReader
 from navigation.motion import TimedMotionExecutor
+from navigation.navigator import (
+    Navigator,
+    consume_nav_command,
+    load_zones,
+    write_nav_status,
+)
+from navigation.slam import SlamMapper
 from spray.controller import SprayController
 from spray.gpio import create_gpio_backend, PinMap
 from spray.safety import evaluate_spray_allowed
@@ -142,11 +149,16 @@ class CoreApplication:
         self._last_drive_status_write = 0.0
 
     def _init_navigation(self) -> None:
-        """LiDAR + area coverage; only on nodes that control the motors."""
+        """LiDAR + area coverage + SLAM mapping; only on motor nodes."""
         self.lidar: LidarReader | None = None
         self.coverage: CoverageController | None = None
+        self.slam: SlamMapper | None = None
+        self.navigator: Navigator | None = None
         self._coverage_was_active = False
         self._last_coverage_status_write = 0.0
+        self._nav_was_active = False
+        self._last_nav_status_write = 0.0
+        self._last_odometry_ts = 0.0
         if not self.node.runs_drive:
             return
         lidar_cfg = self.config.get("lidar", {})
@@ -167,6 +179,21 @@ class CoreApplication:
             pivot_deg_s=float(cov_cfg.get("pivot_deg_s", 45.0)),
         )
         self.coverage = CoverageController(self.motion, self.lidar, self.config)
+        mapping_cfg = self.config.get("mapping", {})
+        if self.lidar is not None and bool(mapping_cfg.get("enabled", True)):
+            self.slam = SlamMapper(
+                self.lidar,
+                self.config,
+                map_image_path=self.paths.map_image_path,
+                map_meta_path=self.paths.map_meta_path,
+                map_saved_path=self.paths.map_saved_path,
+            )
+            self.navigator = Navigator(
+                pose_source=self.slam.pose,
+                grid_source=self.slam.grid,
+                lidar=self.lidar,
+                config=self.config,
+            )
 
     def _local_config_mtime(self) -> float:
         p = get_config_dir() / "local.yaml"
@@ -215,6 +242,10 @@ class CoreApplication:
                 pivot_deg_s=float(cov_cfg.get("pivot_deg_s", 45.0)),
             )
             self.coverage.update_config(self.config)
+        if self.slam:
+            self.slam.update_config(self.config)
+        if self.navigator:
+            self.navigator.update_config(self.config)
         logger.info("Config reloaded from local.yaml")
 
     def _on_detections(self, frame: Frame, detections: list[Detection]) -> None:
@@ -282,9 +313,11 @@ class CoreApplication:
     def _poll_drive(self) -> None:
         command = consume_drive_command(self.paths)
         if command is not None:
-            # Manual teleop always wins over an autonomous coverage run
+            # Manual teleop always wins over an autonomous run
             if self.coverage and self.coverage.active:
                 self.coverage.stop("Manuelle Steuerung übernommen")
+            if self.navigator and self.navigator.active:
+                self.navigator.stop("Manuelle Steuerung übernommen")
             self.drive_controller.set_speeds(
                 float(command.get("left", 0.0)),
                 float(command.get("right", 0.0)),
@@ -351,6 +384,8 @@ class CoreApplication:
         if command:
             action = str(command.get("action", "")).lower()
             if action == "start":
+                if self.navigator and self.navigator.active:
+                    self.navigator.stop("Bereichsfahrt gestartet")
                 self.coverage.start(
                     float(command.get("length_m", 1.0)),
                     float(command.get("width_m", 1.0)),
@@ -377,6 +412,84 @@ class CoreApplication:
         if now - self._last_coverage_status_write > 0.5:
             write_coverage_status(self.paths, self.coverage.status_dict())
             self._last_coverage_status_write = now
+
+    def _nav_status(self) -> dict[str, Any]:
+        status = self.navigator.status_dict() if self.navigator else {}
+        status["slam_available"] = bool(self.slam and self.slam.available)
+        return status
+
+    def _report_odometry(self) -> None:
+        """Feed the currently applied track speeds into SLAM dead reckoning."""
+        if not self.slam:
+            return
+        now = time.monotonic()
+        if self._last_odometry_ts == 0.0:
+            self._last_odometry_ts = now
+            return
+        dt = now - self._last_odometry_ts
+        self._last_odometry_ts = now
+        status = self.drive_controller.status_dict()
+        scale = status.get("max_speed") or 1.0
+        self.slam.report_motion(
+            status.get("left", 0.0) / scale,
+            status.get("right", 0.0) / scale,
+            dt,
+        )
+
+    def _poll_nav(self) -> None:
+        if not self.navigator or not self.slam:
+            return
+        command = consume_nav_command(self.paths)
+        if command:
+            action = str(command.get("action", "")).lower()
+            if action == "goto":
+                if self.coverage and self.coverage.active:
+                    self.coverage.stop("Navigation gestartet")
+                self.navigator.goto(
+                    float(command.get("x_m", 0.0)),
+                    float(command.get("y_m", 0.0)),
+                )
+            elif action == "mow_zone":
+                zone_id = str(command.get("zone_id", ""))
+                zone = next(
+                    (z for z in load_zones(self.paths) if str(z.get("id")) == zone_id),
+                    None,
+                )
+                if zone is None:
+                    status = self._nav_status()
+                    status["error"] = "Zone nicht gefunden"
+                    write_nav_status(self.paths, status)
+                else:
+                    if self.coverage and self.coverage.active:
+                        self.coverage.stop("Navigation gestartet")
+                    self.navigator.mow_zone(zone)
+            elif action == "stop":
+                self.navigator.stop("Manuell gestoppt")
+            elif action == "map_reset":
+                self.navigator.stop("Karte zurückgesetzt")
+                self.slam.reset_map()
+            elif action == "map_save":
+                self.slam.save_map()
+            else:
+                logger.warning("Unknown nav action: %s", action)
+            write_nav_status(self.paths, self._nav_status())
+            self._last_nav_status_write = time.monotonic()
+
+        if self.navigator.active:
+            left, right = self.navigator.tick()
+            self.drive_controller.set_speeds(left, right)
+            self._nav_was_active = True
+        elif self._nav_was_active:
+            # Run just ended (done/aborted): make sure the motors stop now
+            self.drive_controller.stop_motion()
+            self._nav_was_active = False
+            write_nav_status(self.paths, self._nav_status())
+            self._last_nav_status_write = time.monotonic()
+
+        now = time.monotonic()
+        if now - self._last_nav_status_write > 0.5:
+            write_nav_status(self.paths, self._nav_status())
+            self._last_nav_status_write = now
 
     def _handle_snapshot(self, name: str) -> None:
         if self.recorder.state != RecordingState.IDLE:
@@ -480,6 +593,9 @@ class CoreApplication:
                 self.lidar.start()
             if self.coverage:
                 write_coverage_status(self.paths, self.coverage.status_dict())
+            if self.slam:
+                self.slam.start()
+                write_nav_status(self.paths, self._nav_status())
 
         self._preview_camera = None
         if self.node.runs_vision:
@@ -511,6 +627,8 @@ class CoreApplication:
             if self.node.runs_drive:
                 self._poll_drive()
                 self._poll_coverage()
+                self._poll_nav()
+                self._report_odometry()
             if self.pipeline:
                 if not self.pipeline.process_one():
                     time.sleep(0.01)
@@ -527,8 +645,12 @@ class CoreApplication:
                 time.sleep(0.02)
 
     def shutdown(self) -> None:
+        if self.navigator:
+            self.navigator.stop("Core-Prozess beendet")
         if self.coverage:
             self.coverage.stop("Core-Prozess beendet")
+        if self.slam:
+            self.slam.stop()
         if self.lidar:
             self.lidar.stop()
         if self.pipeline:

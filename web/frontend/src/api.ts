@@ -84,6 +84,50 @@ export interface CoverageConfig {
   max_avoid_attempts: number;
 }
 
+export interface MapMeta {
+  size_pixels: number;
+  size_meters: number;
+}
+
+export interface NavStatus {
+  state: "idle" | "turning" | "driving" | "done" | "aborted";
+  mode: "goto" | "mow";
+  x_m: number | null;
+  y_m: number | null;
+  theta_deg: number | null;
+  target_x_m: number | null;
+  target_y_m: number | null;
+  waypoints: number[][];
+  line_index: number;
+  line_count: number;
+  zone_name: string;
+  lidar_connected: boolean;
+  slam_available: boolean;
+  error: string | null;
+}
+
+export interface Zone {
+  id: string;
+  name: string;
+  x_m: number;
+  y_m: number;
+  width_m: number;
+  height_m: number;
+  direction_deg: number;
+}
+
+export interface NavigationConfig {
+  drive_speed: number;
+  turn_speed: number;
+  waypoint_tolerance_m: number;
+  heading_tolerance_deg: number;
+  obstacle_stop_m: number;
+  obstacle_sector_deg: number;
+  robot_radius_m: number;
+  line_spacing_m: number;
+  max_replans: number;
+}
+
 export type ServoName = "position" | "tension" | "trigger";
 
 export interface ServoStep {
@@ -309,6 +353,97 @@ export async function startServoHome(): Promise<ServoStatus> {
 export function lidarPreviewUrl(cacheBust?: number): string {
   const q = cacheBust != null ? `?t=${cacheBust}` : "";
   return `${API}/lidar/preview${q}`;
+}
+
+export function mapImageUrl(cacheBust?: number): string {
+  const q = cacheBust != null ? `?t=${cacheBust}` : "";
+  return `${API}/map/image${q}`;
+}
+
+export async function fetchMapMeta(): Promise<MapMeta> {
+  const r = await fetch(`${API}/map/meta`);
+  if (!r.ok) throw new Error("Karten-Metadaten laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function resetMap(): Promise<NavStatus> {
+  const r = await fetch(`${API}/map/reset`, { method: "POST" });
+  if (!r.ok) throw new Error("Karte zurücksetzen fehlgeschlagen");
+  return r.json();
+}
+
+export async function saveMap(): Promise<NavStatus> {
+  const r = await fetch(`${API}/map/save`, { method: "POST" });
+  if (!r.ok) throw new Error("Karte speichern fehlgeschlagen");
+  return r.json();
+}
+
+export async function fetchNavStatus(): Promise<NavStatus> {
+  const r = await fetch(`${API}/nav/status`);
+  if (!r.ok) throw new Error("Navigationsstatus laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function navGoto(xM: number, yM: number): Promise<NavStatus> {
+  const r = await fetch(`${API}/nav/goto`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ x_m: xM, y_m: yM }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Zielfahrt starten fehlgeschlagen");
+  }
+  return r.json();
+}
+
+export async function navStop(): Promise<NavStatus> {
+  const r = await fetch(`${API}/nav/stop`, { method: "POST" });
+  if (!r.ok) throw new Error("Navigation stoppen fehlgeschlagen");
+  return r.json();
+}
+
+export async function fetchZones(): Promise<Zone[]> {
+  const r = await fetch(`${API}/zones`);
+  if (!r.ok) throw new Error("Zonen laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function saveZones(zones: Zone[]): Promise<Zone[]> {
+  const r = await fetch(`${API}/zones`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(zones),
+  });
+  if (!r.ok) throw new Error("Zonen speichern fehlgeschlagen");
+  return r.json();
+}
+
+export async function mowZone(zoneId: string): Promise<NavStatus> {
+  const r = await fetch(`${API}/zones/${zoneId}/mow`, { method: "POST" });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Zone mähen starten fehlgeschlagen");
+  }
+  return r.json();
+}
+
+export async function fetchNavigationConfig(): Promise<NavigationConfig> {
+  const r = await fetch(`${API}/config/navigation`);
+  if (!r.ok) throw new Error("Navigationsparameter laden fehlgeschlagen");
+  return r.json();
+}
+
+export async function updateNavigationConfig(
+  cfg: Partial<NavigationConfig>
+): Promise<NavigationConfig> {
+  const r = await fetch(`${API}/config/navigation`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cfg),
+  });
+  if (!r.ok) throw new Error("Navigationsparameter speichern fehlgeschlagen");
+  return r.json();
 }
 
 export async function fetchClasses(): Promise<PlantClass[]> {

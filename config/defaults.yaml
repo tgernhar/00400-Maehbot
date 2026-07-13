@@ -67,6 +67,28 @@ coverage:
   detour_m: 0.30           # sidestep distance when avoiding
   max_avoid_attempts: 3    # abort run after this many failed avoidances
 
+# --- SLAM mapping (BreezySLAM, see docs/mapping-navigation.md) ---
+mapping:
+  enabled: true
+  map_size_pixels: 800     # square occupancy grid resolution
+  map_size_meters: 20.0    # mapped area edge length; robot starts at center
+  map_quality: 50          # 0-255, scan integration speed into the map
+  hole_width_mm: 300       # obstacle (wall) width assumed by tinySLAM
+  update_rate_hz: 5        # SLAM update rate (thread, decoupled from drive loop)
+  localize_only: false     # true = keep saved map fixed, only localize
+
+# --- Map navigation (click-to-go + zone line mowing) ---
+navigation:
+  drive_speed: 0.5           # track speed while driving straight (0..1)
+  turn_speed: 0.5            # track speed while pivoting (0..1)
+  waypoint_tolerance_m: 0.15 # waypoint reached below this distance
+  heading_tolerance_deg: 8   # start driving when heading error is below this
+  obstacle_stop_m: 0.30      # stop + replan when LiDAR sees something closer
+  obstacle_sector_deg: 60    # front sector width checked for obstacles
+  robot_radius_m: 0.25       # inflation radius for path planning
+  line_spacing_m: 0.15       # lane distance for zone line mowing
+  max_replans: 3             # abort after this many obstacle replans
+
 # --- Camera ---
 camera:
   source: auto     # auto | picamera2 | usb | mock (auto = picamera2 if available)
