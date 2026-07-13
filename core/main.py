@@ -193,6 +193,7 @@ class CoreApplication:
                 grid_source=self.slam.grid,
                 lidar=self.lidar,
                 config=self.config,
+                debug_log_path=str(self.paths.root / "debug-f2dd0e.log"),
             )
 
     def _local_config_mtime(self) -> float:

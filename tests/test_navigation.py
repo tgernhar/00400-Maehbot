@@ -156,6 +156,28 @@ def test_plan_path_unreachable() -> None:
     assert path is None
 
 
+def test_plan_path_clears_robot_footprint_near_walls() -> None:
+    """Regression: tight SLAM walls must not trap the robot (real map fixture)."""
+    from pathlib import Path
+
+    from PIL import Image
+
+    fixture = Path(__file__).resolve().parents[1] / "data" / "maehbot" / "map_test.png"
+    if not fixture.exists():
+        pytest.skip("map_test.png fixture missing (capture from Pi /api/map/image)")
+    data = Image.open(fixture).convert("L").tobytes()
+    path = plan_path(
+        data,
+        size_px=800,
+        size_m=20.0,
+        start_m=(10.672, 9.468),
+        goal_m=(5.0, 10.0),
+        robot_radius_m=0.25,
+    )
+    assert path is not None
+    assert len(path) >= 2
+
+
 # -- odometry / scan conversion ---------------------------------------------------
 
 
