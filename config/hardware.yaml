@@ -17,6 +17,20 @@ motor:
   right_pwm: 13    # PWMB  (physical pin 33)
   pwm_frequency_hz: 1000
 
+# Wheel encoders (BCM). Incremental quadrature: channel A + channel B per wheel.
+# Cable colours (typical): red=Vcc, black=0V, white=A+, green=B+, shield=GND.
+# Enable + calibrate via config/local.yaml (encoder.enabled, wheel_diameter_mm,
+# track_width_mm). Do NOT connect 5 V encoder outputs directly to Pi GPIO (max 3.3 V).
+encoder:
+  left:
+    channel_a: 21    # A+  (physical pin 40)
+    channel_b: 24    # B+  (physical pin 18)
+  right:
+    channel_a: 14    # A+  (physical pin 8)
+    channel_b: 15    # B+  (physical pin 10)
+  supply_v: 5        # encoder Vcc: 5 or 3.3 — match your encoder datasheet
+  pulses_per_rev: 0  # quadrature counts per wheel rev (e.g. 11 PPR × 4 = 44)
+
 # Spray servos (BCM). Signal pins only — power the servos from an external
 # 5-6 V supply (NOT the Pi 5V rail) with common ground to the Pi.
 # Calibrate angle range / pulse widths per servo type in config/local.yaml.

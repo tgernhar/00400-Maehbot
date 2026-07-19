@@ -43,7 +43,104 @@ Die physischen Pin-Nummern beziehen sich auf die 40-polige Pi-Stiftleiste.
 | AO1/AO2 | Motor Kette links | – | – |
 | BO1/BO2 | Motor Kette rechts | – | – |
 
-Die Spray-Pins (Düse 17, Pumpe 27, Tank 22/23) bleiben frei von diesen Belegungen.
+Die Spray-Pins (Düse 17, Pumpe 27, Tank 22/23) und Servo-Signale (18, 19, 20)
+bleiben frei von Motor- und Encoder-Belegungen.
+
+## Rad-Encoder (Quadratur, links + rechts)
+
+Jeder Encoder am Rad hat **fünf Adern** (typische Farbcodierung):
+
+| Ader | Bezeichnung | Funktion |
+|---|---|---|
+| Rot | Vcc | Versorgung Plus |
+| Schwarz | 0V | Signal-Masse |
+| Weiß | A+ | Quadratur-Kanal A |
+| Grün | B+ | Quadratur-Kanal B |
+| Schirm | Shield GND | Kabelschirm → Masse |
+
+**Gemeinsame Versorgung:** Rot aller Encoder an **5 V** (Pin 2 oder 4) oder **3V3**
+(Pin 1 oder 17), je nach Encoder-Datenblatt. Schwarz und Schirm an **GND**
+(gemeinsam mit TB6612FNG und Akku-Minus).
+
+**GPIO-Pegel:** Pi-Eingänge vertragen max. **3,3 V**. Liefert der Encoder 5-V-Signale
+auf A+/B+, Pegelwandler oder 3,3-V-kompatible Encoder verwenden.
+
+### Encoder links (Kette links)
+
+| Ader | Pi BCM (GPIO) | Pi physisch |
+|---|---|---|
+| Weiß (A+) | 21 | 40 |
+| Grün (B+) | 24 | 18 |
+| Rot (Vcc) | 5 V oder 3V3 | 2/4 oder 1/17 |
+| Schwarz (0V) | GND | z. B. 6, 9, 14, 20, 25, 30, 34, 39 |
+| Schirm (GND) | GND | am Pi-Ende mit Masse verbinden |
+
+### Encoder rechts (Kette rechts)
+
+| Ader | Pi BCM (GPIO) | Pi physisch |
+|---|---|---|
+| Weiß (A+) | 14 | 8 |
+| Grün (B+) | 15 | 10 |
+| Rot (Vcc) | 5 V oder 3V3 | 2/4 oder 1/17 (gemeinsamer Rail) |
+| Schwarz (0V) | GND | wie links |
+| Schirm (GND) | GND | wie links |
+
+GPIO 14/15 sind UART-Pins; sie bleiben frei, solange LiDAR per USB (`/dev/ttyUSB0`)
+läuft und kein UART-LiDAR an Pin 8/10 hängt.
+
+### Software (Bereichsfahrt mit Encodern)
+
+Bei aktivierten und kalibrierten Encodern misst die Bereichsfahrt die
+tatsächlich gefahrene Strecke statt per Zeit zu schätzen
+(`EncoderMotionExecutor` in `navigation/motion.py`):
+
+- **Gerade Strecken** enden bei der gemessenen Distanz (Mittel beider Ketten);
+  eine leichte Korrektur bremst die schnellere Kette, damit der Roboter
+  geradeaus fährt.
+- **Drehungen** enden bei der gemessenen Bogenlänge:
+  `track_width_mm / 2 × Winkel` pro Kette.
+- **Sicherheits-Timeout:** Dauert ein Segment 3× länger als kalibriert
+  (Rad blockiert, keine Impulse), wird es abgebrochen.
+
+Aktivierung in `config/local.yaml`:
+
+```yaml
+encoder:
+  enabled: true
+  pulses_per_rev: 44        # Quadratur-Zählungen pro Radumdrehung (PPR × 4)
+  wheel_diameter_mm: 65     # gemessener Rad-/Antriebsrad-Durchmesser
+  track_width_mm: 200       # Abstand der Kettenmittelpunkte
+```
+
+Ohne Encoder (oder unkalibriert) fällt die Software automatisch auf die
+zeitbasierte Steuerung (`TimedMotionExecutor`) zurück; das Core-Log zeigt beim
+Start, welcher Modus aktiv ist.
+
+### Übersicht aller Fahr-Pins (BCM)
+
+| Funktion | BCM | Physisch |
+|---|---|---|
+| Motor links Richtung | 5, 6 | 29, 31 |
+| Motor links PWM | 12 | 32 |
+| Motor rechts Richtung | 16, 26 | 36, 37 |
+| Motor rechts PWM | 13 | 33 |
+| Motor STBY | 25 | 22 |
+| **Encoder links A/B** | **21, 24** | **40, 18** |
+| **Encoder rechts A/B** | **14, 15** | **8, 10** |
+
+Pins in `config/hardware.yaml` → `encoder:` und `motor:`. Für die Bereichsfahrt
+`encoder.enabled: true` setzen und kalibrieren (siehe Software-Abschnitt unten).
+
+```text
+                    Raspberry Pi 5 (Fahr-Pi)
+                    ────────────────────────
+Encoder LINKS                    Encoder RECHTS
+  Weiß  A+  ──► GPIO21 (Pin 40)    Weiß  A+  ──► GPIO14 (Pin 8)
+  Grün  B+  ──► GPIO24 (Pin 18)    Grün  B+  ──► GPIO15 (Pin 10)
+  Rot   Vcc ──┬─► 5V Pin 2/4       Rot   Vcc ──┘   (gemeinsam)
+  Schwarz 0V ─┴─► GND Pin 6        Schwarz 0V ───► GND Pin 6
+  Shield GND ───► GND              Shield GND ───► GND
+```
 
 ## Wiring-Diagramm
 
@@ -185,13 +282,29 @@ motor:
   right_in2: 26
   right_pwm: 13
   standby: 25
+
+encoder:
+  left:
+    channel_a: 21
+    channel_b: 24
+  right:
+    channel_a: 14
+    channel_b: 15
+  supply_v: 5
+  pulses_per_rev: 44   # example: 11 PPR × 4 (quadrature)
 ```
 
 ## Inbetriebnahme
 
-1. Verdrahtung nach Tabelle, gemeinsame Masse prüfen.
-2. `drive.enabled: true` setzen.
-3. In der Web-UI unter **Fahren** zunächst mit geringer Geschwindigkeit testen.
-4. Läuft eine Kette falsch herum: `invert_left`/`invert_right` umschalten.
-5. Dreht der Roboter bei „vorwärts“ statt geradeaus, sind die Kanäle/Motoren
+1. Verdrahtung nach Tabelle (Motor + Encoder), gemeinsame Masse prüfen.
+2. Encoder-Versorgungsspannung am Datenblatt prüfen (5 V vs. 3,3 V).
+3. `drive.enabled: true` setzen.
+4. In der Web-UI unter **Fahren** zunächst mit geringer Geschwindigkeit testen.
+5. Läuft eine Kette falsch herum: `invert_left`/`invert_right` umschalten.
+6. Dreht der Roboter bei „vorwärts“ statt geradeaus, sind die Kanäle/Motoren
    vertauscht → Verdrahtung oder Invert-Flags anpassen.
+7. Encoder: Impulse pro Umdrehung messen, `encoder.pulses_per_rev` setzen;
+   Richtung prüfen (`encoder.invert_left` / `invert_right`).
+8. Encoder-Kalibrierung testen: kurze Bereichsfahrt (z. B. 1 × 1 m) starten und
+   gefahrene Strecke nachmessen; bei Abweichung `wheel_diameter_mm` anpassen,
+   bei ungenauen 90°-Drehungen `track_width_mm`.

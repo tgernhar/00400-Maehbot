@@ -43,3 +43,12 @@
 #   right_in2: 26
 #   right_pwm: 13
 #   standby: 25
+
+# --- Wheel encoders for coverage driving (pins in config/hardware.yaml) ---
+# encoder:
+#   enabled: true
+#   pulses_per_rev: 44        # quadrature counts per wheel revolution
+#   wheel_diameter_mm: 65     # measured wheel/sprocket diameter
+#   track_width_mm: 200       # distance between track centers (pivot accuracy)
+#   invert_left: false        # flip if a wheel counts backwards while driving forward
+#   invert_right: false

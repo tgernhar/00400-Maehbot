@@ -15,6 +15,7 @@ from maehbot.types import Detection, Frame, SprayEvent, SystemStatus
 from core.health import HealthMonitor
 from drive.command import consume_drive_command, write_drive_status
 from drive.controller import DriveController
+from drive.encoder import create_encoder_pair
 from drive.motor import MotorDriver, MotorPins
 from navigation.coverage import (
     CoverageController,
@@ -22,7 +23,7 @@ from navigation.coverage import (
     write_coverage_status,
 )
 from navigation.lidar import LidarReader
-from navigation.motion import TimedMotionExecutor
+from navigation.motion import EncoderMotionExecutor, TimedMotionExecutor
 from navigation.navigator import (
     Navigator,
     consume_nav_command,
@@ -154,6 +155,7 @@ class CoreApplication:
         self.coverage: CoverageController | None = None
         self.slam: SlamMapper | None = None
         self.navigator: Navigator | None = None
+        self.encoders = None
         self._coverage_was_active = False
         self._last_coverage_status_write = 0.0
         self._nav_was_active = False
@@ -172,12 +174,25 @@ class CoreApplication:
                 preview_range_m=float(lidar_cfg.get("preview_range_m", 4.0)),
             )
         cov_cfg = self.config.get("coverage", {})
-        self.motion = TimedMotionExecutor(
-            drive_speed=float(cov_cfg.get("drive_speed", 0.5)),
-            turn_speed=float(cov_cfg.get("turn_speed", 0.5)),
-            speed_m_s=float(cov_cfg.get("speed_m_s", 0.10)),
-            pivot_deg_s=float(cov_cfg.get("pivot_deg_s", 45.0)),
-        )
+        self.encoders = create_encoder_pair(self.config, force_mock=self.force_mock)
+        if self.encoders:
+            enc_cfg = self.config.get("encoder", {})
+            self.motion: Any = EncoderMotionExecutor(
+                self.encoders,
+                drive_speed=float(cov_cfg.get("drive_speed", 0.5)),
+                turn_speed=float(cov_cfg.get("turn_speed", 0.5)),
+                speed_m_s=float(cov_cfg.get("speed_m_s", 0.10)),
+                pivot_deg_s=float(cov_cfg.get("pivot_deg_s", 45.0)),
+                track_width_m=float(enc_cfg.get("track_width_mm", 200)) / 1000.0,
+            )
+            logger.info("Coverage nutzt Rad-Encoder (EncoderMotionExecutor)")
+        else:
+            self.motion = TimedMotionExecutor(
+                drive_speed=float(cov_cfg.get("drive_speed", 0.5)),
+                turn_speed=float(cov_cfg.get("turn_speed", 0.5)),
+                speed_m_s=float(cov_cfg.get("speed_m_s", 0.10)),
+                pivot_deg_s=float(cov_cfg.get("pivot_deg_s", 45.0)),
+            )
         self.coverage = CoverageController(self.motion, self.lidar, self.config)
         mapping_cfg = self.config.get("mapping", {})
         if self.lidar is not None and bool(mapping_cfg.get("enabled", True)):
@@ -242,6 +257,11 @@ class CoreApplication:
                 speed_m_s=float(cov_cfg.get("speed_m_s", 0.10)),
                 pivot_deg_s=float(cov_cfg.get("pivot_deg_s", 45.0)),
             )
+            if isinstance(self.motion, EncoderMotionExecutor):
+                enc_cfg = self.config.get("encoder", {})
+                self.motion.track_width_m = max(
+                    0.01, float(enc_cfg.get("track_width_mm", 200)) / 1000.0
+                )
             self.coverage.update_config(self.config)
         if self.slam:
             self.slam.update_config(self.config)
@@ -654,6 +674,8 @@ class CoreApplication:
             self.slam.stop()
         if self.lidar:
             self.lidar.stop()
+        if self.encoders:
+            self.encoders.close()
         if self.pipeline:
             self.pipeline.stop()
         if self._preview_camera:
