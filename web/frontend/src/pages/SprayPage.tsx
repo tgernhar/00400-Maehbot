@@ -208,6 +208,7 @@ export default function SprayPage() {
             onLoad={() => setPreviewError(false)}
             onError={() => setPreviewError(true)}
           />
+          {!previewError && <div className="crosshair-overlay" aria-hidden="true" />}
           {previewError && (
             <p className="muted live-placeholder spray-preview-hint">
               Kameravorschau nicht verfügbar — Core läuft? Endpoint{" "}

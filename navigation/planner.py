@@ -217,7 +217,6 @@ def plan_path(
     goal_m: tuple[float, float],
     robot_radius_m: float,
     downsample: int = 4,
-    debug_log_path: str | None = None,
 ) -> list[tuple[float, float]] | None:
     """Plan waypoints (meters) from start to goal; None if no path exists.
 
@@ -244,38 +243,6 @@ def plan_path(
     goal_cell = nearest_free_cell(blocked, coarse, goal) or goal
     cells = astar(blocked, coarse, start, goal_cell)
     if cells is None:
-        # #region agent log
-        if debug_log_path:
-            try:
-                import json
-                import time
-
-                with open(debug_log_path, "a", encoding="utf-8") as f:
-                    f.write(
-                        json.dumps(
-                            {
-                                "sessionId": "f2dd0e",
-                                "hypothesisId": "A",
-                                "location": "planner.py:plan_path",
-                                "message": "path planning failed",
-                                "data": {
-                                    "start_m": start_m,
-                                    "goal_m": goal_m,
-                                    "start_cell": start,
-                                    "goal_cell": goal,
-                                    "goal_cell_snapped": goal_cell,
-                                    "radius_cells": radius_cells,
-                                    "start_blocked": blocked[start[1] * coarse + start[0]],
-                                    "goal_blocked": blocked[goal[1] * coarse + goal[0]],
-                                },
-                                "timestamp": int(time.time() * 1000),
-                            }
-                        )
-                        + "\n"
-                    )
-            except OSError:
-                pass
-        # #endregion
         return None
     cells = simplify_path(cells, blocked, coarse)
     waypoints = [((c + 0.5) * cell_m, (r + 0.5) * cell_m) for c, r in cells]

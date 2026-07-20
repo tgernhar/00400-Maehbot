@@ -129,12 +129,10 @@ class Navigator:
         grid_source: GridSource,
         lidar: LidarReader | None,
         config: dict[str, Any],
-        debug_log_path: str | None = None,
     ) -> None:
         self.pose_source = pose_source
         self.grid_source = grid_source
         self.lidar = lidar
-        self._debug_log_path = debug_log_path
         self.update_config(config)
         self.state = NavState.IDLE
         self.mode: str = "goto"  # goto | mow
@@ -239,38 +237,10 @@ class Navigator:
             (pose[0], pose[1]),
             (x_m, y_m),
             self.robot_radius_m,
-            debug_log_path=self._debug_log_path,
         )
         if path is None:
             self.state = NavState.ABORTED
             self._error = "Kein Weg zum Ziel gefunden"
-            # #region agent log
-            if self._debug_log_path:
-                try:
-                    import json
-                    import time
-
-                    with open(self._debug_log_path, "a", encoding="utf-8") as f:
-                        f.write(
-                            json.dumps(
-                                {
-                                    "sessionId": "f2dd0e",
-                                    "hypothesisId": "A",
-                                    "location": "navigator.py:_plan_to",
-                                    "message": "plan_to aborted",
-                                    "data": {
-                                        "pose": pose,
-                                        "goal": (x_m, y_m),
-                                        "error": self._error,
-                                    },
-                                    "timestamp": int(time.time() * 1000),
-                                }
-                            )
-                            + "\n"
-                        )
-                except OSError:
-                    pass
-            # #endregion
             return False
         # path[0] is the robot's own grid cell center — always skip it, and
         # drop any further waypoints that are already within tolerance.
