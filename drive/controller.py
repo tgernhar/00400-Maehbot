@@ -38,11 +38,13 @@ class DriveController:
         self._last_command_ts = 0.0
         self._applied_left = 0.0
         self._applied_right = 0.0
+        self._error: str | None = None
         self._lock = threading.Lock()
         self._worker = threading.Thread(target=self._run_worker, name="drive-worker", daemon=True)
         self._running = False
 
     def start(self) -> None:
+        self._error = None
         self.driver.setup()
         if self.enabled:
             self.driver.enable()
@@ -50,13 +52,30 @@ class DriveController:
         self._worker.start()
         logger.info("Drive controller started (enabled=%s, max_speed=%.2f)", self.enabled, self.max_speed)
 
+    def mark_unavailable(self, error: str) -> None:
+        """Record startup failure; motors stay disabled (e.g. GPIO held by another process)."""
+        self.enabled = False
+        self._error = error
+        self._left = 0.0
+        self._right = 0.0
+        self._applied_left = 0.0
+        self._applied_right = 0.0
+
+    @property
+    def started(self) -> bool:
+        return self._running
+
     def stop(self) -> None:
+        if not self._running:
+            return
         self._running = False
         self._worker.join(timeout=2)
         self.driver.stop()
         self.driver.disable()
 
     def set_speeds(self, left: float, right: float) -> None:
+        if not self._running:
+            return
         with self._lock:
             self._left = _clamp(left)
             self._right = _clamp(right)
@@ -103,7 +122,7 @@ class DriveController:
                 "enabled": self.enabled,
                 "moving": self._applied_left != 0.0 or self._applied_right != 0.0,
                 "max_speed": round(self.max_speed, 3),
-                "error": None,
+                "error": self._error,
             }
 
     def _run_worker(self) -> None:

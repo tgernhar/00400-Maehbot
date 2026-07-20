@@ -296,6 +296,37 @@ export default function DrivePage() {
         </span>
       </div>
 
+      <div className="drive-encoder-row">
+        <h2 className="drive-encoder-title">Rad-Encoder</h2>
+        {status?.encoder_enabled ? (
+          <div className="drive-encoder-values">
+            <span className="badge">
+              Links:{" "}
+              {status.encoder_left_m != null
+                ? `${(status.encoder_left_m * 100).toFixed(1)} cm`
+                : "–"}
+            </span>
+            <span className="badge">
+              Rechts:{" "}
+              {status.encoder_right_m != null
+                ? `${(status.encoder_right_m * 100).toFixed(1)} cm`
+                : "–"}
+            </span>
+            <span className="badge muted">
+              Summe:{" "}
+              {status.encoder_left_m != null && status.encoder_right_m != null
+                ? `${(((status.encoder_left_m + status.encoder_right_m) / 2) * 100).toFixed(1)} cm`
+                : "–"}
+            </span>
+          </div>
+        ) : (
+          <p className="muted drive-encoder-off">
+            Encoder nicht aktiv — in <code>config/local.yaml</code> unter{" "}
+            <code>encoder.enabled: true</code> aktivieren und kalibrieren.
+          </p>
+        )}
+      </div>
+
       <div className={`drive-layout ${isTouch ? "touch" : ""}`}>
         {isTouch ? (
           <div className="drive-controls joystick-controls">

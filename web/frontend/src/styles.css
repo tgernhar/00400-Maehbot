@@ -479,6 +479,30 @@ button {
   margin: 1rem 0;
 }
 
+.drive-encoder-row {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #141a22;
+}
+
+.drive-encoder-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.drive-encoder-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.drive-encoder-off {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 .drive-layout {
   display: flex;
   flex-wrap: nowrap;

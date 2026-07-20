@@ -330,6 +330,19 @@ class CoreApplication:
             return
         self.recorder.handle_command(command)
 
+    def _drive_status_payload(self) -> dict[str, Any]:
+        status = self.drive_controller.status_dict()
+        if self.encoders:
+            left_m, right_m = self.encoders.distances_m()
+            status["encoder_enabled"] = True
+            status["encoder_left_m"] = round(left_m, 4)
+            status["encoder_right_m"] = round(right_m, 4)
+        else:
+            status["encoder_enabled"] = False
+            status["encoder_left_m"] = None
+            status["encoder_right_m"] = None
+        return status
+
     def _poll_drive(self) -> None:
         command = consume_drive_command(self.paths)
         if command is not None:
@@ -344,7 +357,7 @@ class CoreApplication:
             )
         now = time.monotonic()
         if now - self._last_drive_status_write > 0.5:
-            write_drive_status(self.paths, self.drive_controller.status_dict())
+            write_drive_status(self.paths, self._drive_status_payload())
             self._last_drive_status_write = now
 
     def _poll_servo(self) -> None:
@@ -599,16 +612,34 @@ class CoreApplication:
             write_servo_status(self.paths, status)
             return False
 
+    def _try_start_drive_at_startup(self) -> bool:
+        """Start motors; failure must not abort the whole core (duplicate process / GPIO busy)."""
+        try:
+            self.drive_controller.start()
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Motor-GPIO nicht verfügbar — Core startet ohne Antrieb (%s). "
+                "Läuft bereits ein Core? Dann: sudo systemctl stop maehbot-core "
+                "oder nur den Dienst nutzen (journalctl -u maehbot-core -f).",
+                exc,
+            )
+            self.drive_controller.mark_unavailable(str(exc))
+            write_drive_status(self.paths, self._drive_status_payload())
+            return False
+
     def run(self) -> None:
         if not self._try_init_servos_at_startup():
             logger.warning(
                 "Servo-GPIO nicht verfügbar — Core startet ohne Servos "
-                "(Kamera/Vision aktiv). Alten Core-Prozess beenden oder Pi neu starten."
+                "(Kamera/Vision aktiv). Läuft bereits ein Core? "
+                "sudo systemctl stop maehbot-core"
             )
 
         if self.node.runs_drive:
-            self.drive_controller.start()
-            write_drive_status(self.paths, self.drive_controller.status_dict())
+            self._try_start_drive_at_startup()
+            if self.drive_controller.started:
+                write_drive_status(self.paths, self._drive_status_payload())
             if self.lidar:
                 self.lidar.start()
             if self.coverage:

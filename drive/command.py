@@ -25,6 +25,9 @@ def default_drive_status() -> dict[str, Any]:
         "moving": False,
         "max_speed": 1.0,
         "error": None,
+        "encoder_enabled": False,
+        "encoder_left_m": None,
+        "encoder_right_m": None,
     }
 
 

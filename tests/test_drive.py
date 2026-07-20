@@ -110,7 +110,20 @@ def test_drive_status_roundtrip(tmp_path):
     paths = StoragePaths(tmp_path)
     paths.ensure()
     assert read_drive_status(paths) == default_drive_status()
-    write_drive_status(paths, {"left": 0.5, "right": 0.5, "moving": True})
+    write_drive_status(
+        paths,
+        {
+            "left": 0.5,
+            "right": 0.5,
+            "moving": True,
+            "encoder_enabled": True,
+            "encoder_left_m": 1.234,
+            "encoder_right_m": 1.198,
+        },
+    )
     status = read_drive_status(paths)
     assert status["left"] == 0.5
     assert status["moving"] is True
+    assert status["encoder_enabled"] is True
+    assert status["encoder_left_m"] == 1.234
+    assert status["encoder_right_m"] == 1.198

@@ -47,6 +47,9 @@ export interface DriveStatus {
   moving: boolean;
   max_speed: number;
   error: string | null;
+  encoder_enabled: boolean;
+  encoder_left_m: number | null;
+  encoder_right_m: number | null;
 }
 
 export interface DriveConfig {

@@ -52,6 +52,9 @@ class DriveStatusOut(BaseModel):
     moving: bool = False
     max_speed: float = 1.0
     error: str | None = None
+    encoder_enabled: bool = False
+    encoder_left_m: float | None = None
+    encoder_right_m: float | None = None
 
 
 class DriveConfigIn(BaseModel):
