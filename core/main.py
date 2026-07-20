@@ -356,7 +356,7 @@ class CoreApplication:
                 float(command.get("right", 0.0)),
             )
         now = time.monotonic()
-        if now - self._last_drive_status_write > 0.5:
+        if now - self._last_drive_status_write > 0.25:
             write_drive_status(self.paths, self._drive_status_payload())
             self._last_drive_status_write = now
 

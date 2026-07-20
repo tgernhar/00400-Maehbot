@@ -22,6 +22,11 @@ import DriveJoystick from "../components/DriveJoystick";
 const KEEPALIVE_MS = 300;
 const PREVIEW_REFRESH_MS = 66; // ~15 fps, passend zu camera.preview_fps
 const LIDAR_REFRESH_MS = 500; // ~2 fps, passend zu lidar.preview_fps
+const DRIVE_STATUS_POLL_MS = 500; // Encoder-Anzeige aktualisieren
+
+function formatEncoderCm(m: number | null | undefined): string {
+  return m != null ? `${(m * 100).toFixed(1)} cm` : "–";
+}
 
 const COVERAGE_STATE_LABELS: Record<CoverageStatus["state"], string> = {
   idle: "Bereit",
@@ -105,11 +110,18 @@ export default function DrivePage() {
     fetchDriveStatus().then(setStatus).catch(() => undefined);
     fetchCoverageConfig().then(setCoverageConfig).catch(() => undefined);
     fetchCoverageStatus().then(setCoverage).catch(() => undefined);
-    const t = setInterval(() => {
-      fetchDriveStatus().then(setStatus).catch(() => undefined);
-      fetchCoverageStatus().then(setCoverage).catch(() => undefined);
-    }, 1000);
-    return () => clearInterval(t);
+    const drivePoll = setInterval(
+      () => fetchDriveStatus().then(setStatus).catch(() => undefined),
+      DRIVE_STATUS_POLL_MS
+    );
+    const coveragePoll = setInterval(
+      () => fetchCoverageStatus().then(setCoverage).catch(() => undefined),
+      1000
+    );
+    return () => {
+      clearInterval(drivePoll);
+      clearInterval(coveragePoll);
+    };
   }, []);
 
   const clearKeepalive = useCallback(() => {
@@ -294,35 +306,37 @@ export default function DrivePage() {
         <span className={`badge ${status?.enabled ? "ok" : "error"}`}>
           {status?.enabled ? "aktiviert" : "deaktiviert"}
         </span>
+        {status?.encoder_enabled && (
+          <>
+            <span className="badge ok">Enc. links: {formatEncoderCm(status.encoder_left_m)}</span>
+            <span className="badge ok">Enc. rechts: {formatEncoderCm(status.encoder_right_m)}</span>
+          </>
+        )}
       </div>
 
       <div className="drive-encoder-row">
-        <h2 className="drive-encoder-title">Rad-Encoder</h2>
+        <h2 className="drive-encoder-title">Rad-Encoder (Strecke seit Core-Start)</h2>
         {status?.encoder_enabled ? (
           <div className="drive-encoder-values">
-            <span className="badge">
-              Links:{" "}
-              {status.encoder_left_m != null
-                ? `${(status.encoder_left_m * 100).toFixed(1)} cm`
-                : "–"}
+            <span className="badge ok">
+              Kette links: {formatEncoderCm(status.encoder_left_m)}
+            </span>
+            <span className="badge ok">
+              Kette rechts: {formatEncoderCm(status.encoder_right_m)}
             </span>
             <span className="badge">
-              Rechts:{" "}
-              {status.encoder_right_m != null
-                ? `${(status.encoder_right_m * 100).toFixed(1)} cm`
-                : "–"}
-            </span>
-            <span className="badge muted">
-              Summe:{" "}
+              Mittel:{" "}
               {status.encoder_left_m != null && status.encoder_right_m != null
-                ? `${(((status.encoder_left_m + status.encoder_right_m) / 2) * 100).toFixed(1)} cm`
+                ? formatEncoderCm((status.encoder_left_m + status.encoder_right_m) / 2)
                 : "–"}
             </span>
           </div>
         ) : (
           <p className="muted drive-encoder-off">
             Encoder nicht aktiv — in <code>config/local.yaml</code> unter{" "}
-            <code>encoder.enabled: true</code> aktivieren und kalibrieren.
+            <code>encoder.enabled: true</code> setzen und{" "}
+            <code>pulses_per_rev</code> + <code>wheel_diameter_mm</code> kalibrieren.
+            Danach <code>sudo systemctl restart maehbot-core maehbot-web</code>.
           </p>
         )}
       </div>
