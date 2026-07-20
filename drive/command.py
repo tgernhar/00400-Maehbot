@@ -28,6 +28,8 @@ def default_drive_status() -> dict[str, Any]:
         "encoder_enabled": False,
         "encoder_left_m": None,
         "encoder_right_m": None,
+        "encoder_left_counts": None,
+        "encoder_right_counts": None,
     }
 
 

@@ -50,6 +50,8 @@ export interface DriveStatus {
   encoder_enabled: boolean;
   encoder_left_m: number | null;
   encoder_right_m: number | null;
+  encoder_left_counts: number | null;
+  encoder_right_counts: number | null;
 }
 
 export interface DriveConfig {

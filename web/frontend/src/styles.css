@@ -503,6 +503,16 @@ button {
   font-size: 0.9rem;
 }
 
+.drive-encoder-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+}
+
+.encoder-count {
+  opacity: 0.85;
+  font-size: 0.85em;
+}
+
 .drive-layout {
   display: flex;
   flex-wrap: nowrap;

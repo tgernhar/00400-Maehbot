@@ -55,6 +55,8 @@ class DriveStatusOut(BaseModel):
     encoder_enabled: bool = False
     encoder_left_m: float | None = None
     encoder_right_m: float | None = None
+    encoder_left_counts: int | None = None
+    encoder_right_counts: int | None = None
 
 
 class DriveConfigIn(BaseModel):

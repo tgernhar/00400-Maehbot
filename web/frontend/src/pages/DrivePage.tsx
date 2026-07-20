@@ -25,7 +25,8 @@ const LIDAR_REFRESH_MS = 500; // ~2 fps, passend zu lidar.preview_fps
 const DRIVE_STATUS_POLL_MS = 500; // Encoder-Anzeige aktualisieren
 
 function formatEncoderCm(m: number | null | undefined): string {
-  return m != null ? `${(m * 100).toFixed(1)} cm` : "–";
+  if (m == null) return "–";
+  return `${(m * 100).toFixed(1)} cm`;
 }
 
 const COVERAGE_STATE_LABELS: Record<CoverageStatus["state"], string> = {
@@ -308,8 +309,14 @@ export default function DrivePage() {
         </span>
         {status?.encoder_enabled && (
           <>
-            <span className="badge ok">Enc. links: {formatEncoderCm(status.encoder_left_m)}</span>
-            <span className="badge ok">Enc. rechts: {formatEncoderCm(status.encoder_right_m)}</span>
+            <span className={`badge ${(status.encoder_left_counts ?? 0) !== 0 ? "ok" : "warn"}`}>
+              Enc. links: {formatEncoderCm(status.encoder_left_m)}
+              {status.encoder_left_counts != null && ` (${status.encoder_left_counts} Imp.)`}
+            </span>
+            <span className={`badge ${(status.encoder_right_counts ?? 0) !== 0 ? "ok" : "warn"}`}>
+              Enc. rechts: {formatEncoderCm(status.encoder_right_m)}
+              {status.encoder_right_counts != null && ` (${status.encoder_right_counts} Imp.)`}
+            </span>
           </>
         )}
       </div>
@@ -317,20 +324,35 @@ export default function DrivePage() {
       <div className="drive-encoder-row">
         <h2 className="drive-encoder-title">Rad-Encoder (Strecke seit Core-Start)</h2>
         {status?.encoder_enabled ? (
-          <div className="drive-encoder-values">
-            <span className="badge ok">
-              Kette links: {formatEncoderCm(status.encoder_left_m)}
-            </span>
-            <span className="badge ok">
-              Kette rechts: {formatEncoderCm(status.encoder_right_m)}
-            </span>
-            <span className="badge">
-              Mittel:{" "}
-              {status.encoder_left_m != null && status.encoder_right_m != null
-                ? formatEncoderCm((status.encoder_left_m + status.encoder_right_m) / 2)
-                : "–"}
-            </span>
-          </div>
+          <>
+            <div className="drive-encoder-values">
+              <span className={`badge ${(status.encoder_left_counts ?? 0) !== 0 ? "ok" : "warn"}`}>
+                Kette links: {formatEncoderCm(status.encoder_left_m)}
+                {status.encoder_left_counts != null && (
+                  <span className="encoder-count"> · {status.encoder_left_counts} Impulse</span>
+                )}
+              </span>
+              <span className={`badge ${(status.encoder_right_counts ?? 0) !== 0 ? "ok" : "warn"}`}>
+                Kette rechts: {formatEncoderCm(status.encoder_right_m)}
+                {status.encoder_right_counts != null && (
+                  <span className="encoder-count"> · {status.encoder_right_counts} Impulse</span>
+                )}
+              </span>
+              <span className="badge">
+                Mittel:{" "}
+                {status.encoder_left_m != null && status.encoder_right_m != null
+                  ? formatEncoderCm((status.encoder_left_m + status.encoder_right_m) / 2)
+                  : "–"}
+              </span>
+            </div>
+            {(status.encoder_left_counts === 0 || status.encoder_right_counts === 0) && (
+              <p className="warn drive-encoder-hint">
+                Ein Encoder zählt 0 Impulse — Kabel prüfen (links GPIO 21/24, rechts GPIO 14/15).
+                Rad von Hand drehen und Impulse beobachten. A/B vertauscht? In{" "}
+                <code>config/local.yaml</code> unter <code>encoder.left</code> tauschen.
+              </p>
+            )}
+          </>
         ) : (
           <p className="muted drive-encoder-off">
             Encoder nicht aktiv — in <code>config/local.yaml</code> unter{" "}

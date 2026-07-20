@@ -334,13 +334,18 @@ class CoreApplication:
         status = self.drive_controller.status_dict()
         if self.encoders:
             left_m, right_m = self.encoders.distances_m()
+            left_c, right_c = self.encoders.counts()
             status["encoder_enabled"] = True
             status["encoder_left_m"] = round(left_m, 4)
             status["encoder_right_m"] = round(right_m, 4)
+            status["encoder_left_counts"] = left_c
+            status["encoder_right_counts"] = right_c
         else:
             status["encoder_enabled"] = False
             status["encoder_left_m"] = None
             status["encoder_right_m"] = None
+            status["encoder_left_counts"] = None
+            status["encoder_right_counts"] = None
         return status
 
     def _poll_drive(self) -> None:

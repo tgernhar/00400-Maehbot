@@ -52,6 +52,8 @@ class EncoderPair(Protocol):
 
     def distances_m(self) -> tuple[float, float]: ...
 
+    def counts(self) -> tuple[int, int]: ...
+
     def reset(self) -> None: ...
 
     def close(self) -> None: ...
@@ -82,6 +84,10 @@ class LgpioEncoderPair:
         self._lock = threading.Lock()
         self._left = QuadratureDecoder()
         self._right = QuadratureDecoder()
+        self._left_a = left_a
+        self._left_b = left_b
+        self._right_a = right_a
+        self._right_b = right_b
         # pin -> (decoder, is_channel_a, partner_pin)
         self._pin_map = {
             left_a: (self._left, True, left_b),
@@ -91,9 +97,10 @@ class LgpioEncoderPair:
         }
         self._levels: dict[int, int] = {}
         self._callbacks: list[Any] = []
+        pull_up = getattr(lgpio, "SET_PULL_UP", 0)
         try:
             for pin in self._pin_map:
-                lgpio.gpio_claim_alert(self._chip, pin, lgpio.BOTH_EDGES)
+                lgpio.gpio_claim_alert(self._chip, pin, lgpio.BOTH_EDGES, pull_up)
                 if debounce_us > 0:
                     lgpio.gpio_set_debounce_micros(self._chip, pin, debounce_us)
                 self._levels[pin] = lgpio.gpio_read(self._chip, pin)
@@ -104,6 +111,13 @@ class LgpioEncoderPair:
         except Exception:
             self.close()
             raise
+        logger.info(
+            "Encoder GPIO levels at init: left A/B=%d/%d, right A/B=%d/%d",
+            self._levels[left_a],
+            self._levels[left_b],
+            self._levels[right_a],
+            self._levels[right_b],
+        )
         logger.info(
             "Wheel encoders active: left A/B=%d/%d, right A/B=%d/%d, %.4f mm/count",
             left_a,
@@ -133,6 +147,10 @@ class LgpioEncoderPair:
             left * self._meters_per_count * self._sign_left,
             right * self._meters_per_count * self._sign_right,
         )
+
+    def counts(self) -> tuple[int, int]:
+        with self._lock:
+            return (self._left.count, self._right.count)
 
     def reset(self) -> None:
         with self._lock:
